@@ -3,5 +3,9 @@ bytecount
 copyfile
 tcpclient
 listdir
+
+ctodo
+todos.txt
+
 *.o
 *.core
