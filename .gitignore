@@ -1,5 +1,7 @@
 hello
 bytecount
 copyfile
+tcpclient
+listdir
 *.o
 *.core
