@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -89,15 +90,12 @@ int accept_connection(int sfd, struct sockaddr_in *peer_addr)
 	socklen_t peer_addr_size = sizeof *peer_addr;
 	if((cfd = accept(sfd, (struct sockaddr *)peer_addr, &peer_addr_size)) < 0)
 	{
-		if(errno != EINTR)
+		if (errno != EINTR)
 		{
 			perror("accept");
-			return -1;
 		}
-		else
-		{
-			return -1;
-		}
+
+		return -1;
 	}
 	
 	return cfd;
@@ -107,6 +105,37 @@ void handle_sigint(int signal)
 {
 	(void)signal;
 	running = 0;
+}
+
+void print_payload(const char *payload, ssize_t length)
+{
+	for (ssize_t i = 0; i < length; i++)
+	{
+		unsigned char c = (unsigned char)payload[i];
+
+		if (c >= 32 && c <= 126)
+		{
+			putchar(c);
+		}
+		else if (c == '\n')
+		{
+			printf("\\n");
+		}
+		else if (c == '\r')
+		{
+			printf("\\r");
+		}
+		else if (c == '\t')
+		{
+			printf("\\t");
+		}
+		else
+		{
+			printf("\\x%02x", c);
+		}
+	}
+
+	putchar('\n');
 }
 
 int main (int argc, char *argv[])
@@ -167,9 +196,47 @@ int main (int argc, char *argv[])
 		
 		connection_count++;
 		
+		struct timeval timeout;
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 250000;
+		
+		if(setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) != 0)
+		{
+			close(cfd);
+			close(sfd);
+			perror("setsockopt");
+			return EXIT_FAILURE;
+		} 
+		
+		char payload[256];
+		ssize_t bytes_received;
+		
+		bytes_received = recv(cfd, payload, sizeof payload, 0);
+		
+		if(bytes_received < 0 && errno == EINTR && running == 0)
+		{
+			close(cfd);
+			break;
+		}
+		
+		if(bytes_received < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+		{
+			perror("recv");
+		}
+		
 		char ip[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &peer_addr.sin_addr, ip, sizeof ip);
 		printf("click! [%d] [remote: %s]\n", connection_count, ip);
+		if(bytes_received == 0 || bytes_received < 0)
+		{
+			printf("- Payload: <none>\n");
+		}
+		else if(bytes_received > 0)
+		{
+			printf("- Payload: ");
+			print_payload(payload, bytes_received);
+		}
+		
 		close(cfd);
 	}
 	
