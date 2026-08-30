@@ -123,6 +123,8 @@ int main (int argc, char *argv[])
 	
 	printf("Listening for noise on port: %d\n", port);
 	
+	int connection_count = 0;
+	
 	while (true) {
 		int cfd = accept_connection(sfd);
 		if(cfd < 0)
@@ -131,7 +133,9 @@ int main (int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 		
-		printf("click!\n");
+		connection_count++;
+		
+		printf("click! [%d]\n", connection_count);
 		close(cfd);
 	}
 	
