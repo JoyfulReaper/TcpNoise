@@ -7,5 +7,7 @@ listdir
 ctodo
 todos.txt
 
+tcpnoise
+
 *.o
 *.core
