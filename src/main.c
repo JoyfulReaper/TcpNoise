@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <string.h>
+#include <arpa/inet.h>
 
 void print_usage(char *program)
 {
@@ -78,14 +79,11 @@ bool listen_socket(int sfd)
 	return true;
 }
 
-int accept_connection(int sfd)
+int accept_connection(int sfd, struct sockaddr_in *peer_addr)
 {
 	int cfd;
-	struct sockaddr_in address;
-	socklen_t peer_addr_size;
-	peer_addr_size = sizeof address;
-	
-	if( (cfd = accept(sfd, (struct sockaddr *)&address, &peer_addr_size)) < 0)
+	socklen_t peer_addr_size = sizeof *peer_addr;
+	if((cfd = accept(sfd, (struct sockaddr *)peer_addr, &peer_addr_size)) < 0)
 	{
 		perror("accept");
 		return -1;
@@ -126,7 +124,8 @@ int main (int argc, char *argv[])
 	int connection_count = 0;
 	
 	while (true) {
-		int cfd = accept_connection(sfd);
+		struct sockaddr_in peer_addr;
+		int cfd = accept_connection(sfd,  &peer_addr);
 		if(cfd < 0)
 		{
 			close(sfd);
@@ -135,7 +134,9 @@ int main (int argc, char *argv[])
 		
 		connection_count++;
 		
-		printf("click! [%d]\n", connection_count);
+		char ip[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &peer_addr.sin_addr, ip, sizeof ip);
+		printf("click! [%d] [remote: %s]\n", connection_count, ip);
 		close(cfd);
 	}
 	
