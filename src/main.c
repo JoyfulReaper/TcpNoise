@@ -154,7 +154,7 @@ int main (int argc, char *argv[])
 	
 	if(sigaction(SIGINT, &action, NULL) == -1)
 	{
-		fprintf(stderr, "Failed to register SIGINT signal handler");
+		perror("sigaction");
 		return EXIT_FAILURE;
 	}
 	
