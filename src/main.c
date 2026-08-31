@@ -6,6 +6,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -82,7 +83,7 @@ void print_usage(char *program)
 	fprintf(stderr, "Usage: %s <port>\n", program);
 }
 
-bool process_arguments (int argc, char *argv[], int *port)
+bool process_arguments (int argc, char *argv[], uint16_t *port)
 {
 	if(argc != 2)
 	{
@@ -100,7 +101,7 @@ bool process_arguments (int argc, char *argv[], int *port)
 	if (value < 1 || value > 65535)
 		return false;
 	
-	*port = (int)value;
+	*port = (uint16_t)value;
 	
 	return true;
 }
@@ -118,7 +119,7 @@ int create_socket(void)
 	return sfd;
 }
 
-bool bind_socket(int sfd, int port)
+bool bind_socket(int sfd, uint16_t port)
 {
 	struct sockaddr_in address;
 	memset(&address, 0, sizeof address);
@@ -203,7 +204,7 @@ void print_payload(FILE *output, const char *payload, ssize_t length)
 
 // Possible improvment, keep the file open
 bool log_connection (
-	int port, 
+	uint16_t port, 
 	const char *message,
 	const char *payload,
 	ssize_t length)
@@ -251,7 +252,7 @@ bool log_connection (
 int main (int argc, char *argv[])
 {
 	// Parse port
-	int port;
+	uint16_t port;
 	if(!process_arguments(argc, argv, &port))
 	{
 		print_usage(argv[0]);
@@ -291,7 +292,7 @@ int main (int argc, char *argv[])
 	
 	printf("Listening for noise on port: %d\n", port);
 	
-	int connection_count = 0;
+	uint64_t connection_count = 0;
 	struct seen_ip records[MAX_SEEN_IPS];
 	size_t record_count = 0;
 	
@@ -318,6 +319,8 @@ int main (int argc, char *argv[])
 		strftime(event.timestamp, sizeof event.timestamp, "%Y-%m-%d %H:%M:%S", t_info);
 		
 		connection_count++;
+		event.connection_number = connection_count;
+		event.port = port;
 		
 		// Setup receive timeout
 		struct timeval timeout;
@@ -332,9 +335,7 @@ int main (int argc, char *argv[])
 			return EXIT_FAILURE;
 		} 
 		
-
 		event.payload_len = recv(cfd, event.payload, sizeof event.payload, 0);
-		
 		if(event.payload_len < 0 && errno == EINTR && running == 0)
 		{
 			close(cfd);
@@ -357,7 +358,13 @@ int main (int argc, char *argv[])
 		}
 		
 		char output_buffer[100];
-		int cx = snprintf(output_buffer, sizeof output_buffer, "click! [connection #%d] [port: %d] [remote: %s] [%s] [seen: %d]", connection_count, port, ip, event.timestamp, times_seen);
+		int cx = snprintf(output_buffer, sizeof output_buffer, 
+			"click! [connection #%" PRIu64 "] [port: %hu] [remote: %s] [%s] [seen: %d]", 
+			event.connection_number,
+			event.port,
+			ip, 
+			event.timestamp, 
+			times_seen);
 		if(cx >= (int)sizeof output_buffer)
 		{
 			fprintf(stderr, "output_buffer is too small\n");
@@ -387,7 +394,7 @@ int main (int argc, char *argv[])
 		log_connection(port, output_buffer, event.payload, event.payload_len);
 	}
 	
-	printf("Connection attempts: %d\n", connection_count);
+	printf("Connection attempts: %" PRIu64 "\n", connection_count);
 	
 	close(sfd);
 	return EXIT_SUCCESS;
