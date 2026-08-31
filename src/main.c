@@ -288,10 +288,14 @@ int main (int argc, char *argv[])
 		if(cx >= (int)sizeof output_buffer)
 		{
 			fprintf(stderr, "output_buffer is too small\n");
+			close(cfd);
+			continue;
 		}
 		else if(cx < 0)
 		{
 			fprintf(stderr, "Encoding error\n");
+			close(cfd);
+			continue;
 		}
 		
 		//printf("click! [%d] [remote: %s] [%s]\n", connection_count, ip, time_buffer);
@@ -307,7 +311,7 @@ int main (int argc, char *argv[])
 		}
 		
 		close(cfd);
-		log_connection(port, output_buffer, payload, bytes_received)
+		log_connection(port, output_buffer, payload, bytes_received);
 	}
 	
 	printf("Connection attempts: %d\n", connection_count);
