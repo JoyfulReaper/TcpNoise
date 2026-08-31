@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <time.h>
+#include <stdint.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -15,6 +16,7 @@
 
 #define ENABLE_LOGGING
 #define MAX_SEEN_IPS 1000
+#define MAX_PAYLOAD_LEN 256
 
 volatile sig_atomic_t running = 1;
 
@@ -22,6 +24,17 @@ struct seen_ip
 {
 	char ip[INET_ADDRSTRLEN];
 	unsigned int count;
+};
+
+struct connection_event
+{
+	uint64_t connection_number;
+	uint16_t port;
+	char ip[INET6_ADDRSTRLEN];
+	uint64_t seen_count;
+	char timestamp[64];
+	char payload[MAX_PAYLOAD_LEN];
+	ssize_t payload_len;
 };
 
 int find_seen_ip(
@@ -297,14 +310,16 @@ int main (int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 		
+		struct connection_event event;
+		
 		// Capture timestamp immediately upon accepting
 		time_t now = time(NULL);
 		struct tm *t_info = localtime(&now);
-		char time_buffer[64];
-		strftime(time_buffer, sizeof time_buffer, "%Y-%m-%d %H:%M:%S", t_info);
+		strftime(event.timestamp, sizeof event.timestamp, "%Y-%m-%d %H:%M:%S", t_info);
 		
 		connection_count++;
 		
+		// Setup receive timeout
 		struct timeval timeout;
 		timeout.tv_sec = 0;
 		timeout.tv_usec = 250000;
@@ -317,17 +332,16 @@ int main (int argc, char *argv[])
 			return EXIT_FAILURE;
 		} 
 		
-		char payload[256];
-		ssize_t bytes_received;
-		bytes_received = recv(cfd, payload, sizeof payload, 0);
+
+		event.payload_len = recv(cfd, event.payload, sizeof event.payload, 0);
 		
-		if(bytes_received < 0 && errno == EINTR && running == 0)
+		if(event.payload_len < 0 && errno == EINTR && running == 0)
 		{
 			close(cfd);
 			break;
 		}
 		
-		if(bytes_received < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+		if(event.payload_len < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
 		{
 			perror("recv");
 		}
@@ -343,7 +357,7 @@ int main (int argc, char *argv[])
 		}
 		
 		char output_buffer[100];
-		int cx = snprintf(output_buffer, sizeof output_buffer, "click! [connection #%d] [port: %d] [remote: %s] [%s] [seen: %d]", connection_count, port, ip, time_buffer, times_seen);
+		int cx = snprintf(output_buffer, sizeof output_buffer, "click! [connection #%d] [port: %d] [remote: %s] [%s] [seen: %d]", connection_count, port, ip, event.timestamp, times_seen);
 		if(cx >= (int)sizeof output_buffer)
 		{
 			fprintf(stderr, "output_buffer is too small\n");
@@ -359,18 +373,18 @@ int main (int argc, char *argv[])
 
 		// Print final results
 		printf("%s\n", output_buffer);
-		if(bytes_received == 0 || bytes_received < 0)
+		if(event.payload_len == 0 || event.payload_len < 0)
 		{
 			printf("- Payload: <none>\n");
 		}
-		else if(bytes_received > 0)
+		else if(event.payload_len > 0)
 		{
 			printf("- Payload: ");
-			print_payload(stdout, payload, bytes_received);
+			print_payload(stdout, event.payload, event.payload_len);
 		}
 		
 		close(cfd);
-		log_connection(port, output_buffer, payload, bytes_received);
+		log_connection(port, output_buffer, event.payload, event.payload_len);
 	}
 	
 	printf("Connection attempts: %d\n", connection_count);
