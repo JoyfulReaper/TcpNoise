@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <time.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -183,6 +184,13 @@ int main (int argc, char *argv[])
 	while (running) {
 		struct sockaddr_in peer_addr;
 		int cfd = accept_connection(sfd,  &peer_addr);
+		
+		// Capture timestamp immediately upon accepting
+		time_t now = time(NULL);
+		struct tm *t_info = localtime(&now);
+		char time_buffer[64];
+		strftime(time_buffer, sizeof time_buffer, "%Y-%m-%d %H:%M:%S", t_info);
+		
 		if(cfd < 0 && errno == EINTR && running == 0)
 		{
 			printf("\nSIGINT caught, shutting down...\n");
@@ -226,7 +234,7 @@ int main (int argc, char *argv[])
 		
 		char ip[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &peer_addr.sin_addr, ip, sizeof ip);
-		printf("click! [%d] [remote: %s]\n", connection_count, ip);
+		printf("click! [%d] [remote: %s] [%s]\n", connection_count, ip, time_buffer);
 		if(bytes_received == 0 || bytes_received < 0)
 		{
 			printf("- Payload: <none>\n");
