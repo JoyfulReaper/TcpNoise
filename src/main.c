@@ -13,6 +13,8 @@
 #include <string.h>
 #include <arpa/inet.h>
 
+#define ENABLE_LOGGING
+
 volatile sig_atomic_t running = 1;
 
 void print_usage(char *program)
@@ -108,7 +110,7 @@ void handle_sigint(int signal)
 	running = 0;
 }
 
-void print_payload(const char *payload, ssize_t length)
+void print_payload(FILE *output, const char *payload, ssize_t length)
 {
 	for (ssize_t i = 0; i < length; i++)
 	{
@@ -116,27 +118,74 @@ void print_payload(const char *payload, ssize_t length)
 
 		if (c >= 32 && c <= 126)
 		{
-			putchar(c);
+			fputc(c, output);
 		}
 		else if (c == '\n')
 		{
-			printf("\\n");
+			fprintf(output, "\\n");
 		}
 		else if (c == '\r')
 		{
-			printf("\\r");
+			fprintf(output, "\\r");
 		}
 		else if (c == '\t')
 		{
-			printf("\\t");
+			fprintf(output, "\\t");
 		}
 		else
 		{
-			printf("\\x%02x", c);
+			fprintf(output, "\\x%02x", c);
 		}
 	}
 
-	putchar('\n');
+	fputc('\n', output);
+}
+
+// Possible improvment, keep the file open
+bool log_connection (
+	int port, 
+	const char *message,
+	const char *payload,
+	ssize_t length)
+{
+	#ifndef ENABLE_LOGGING
+		return true;
+	#endif
+	
+	char log_filename[32];
+	snprintf(log_filename, sizeof log_filename, "%d.log", port);
+	
+	FILE *file = fopen(log_filename, "a");
+	if(file == NULL)
+	{
+		perror("fopen");
+		return false;
+	}
+	
+	if(fprintf(file, "%s\n", message) < 0)
+	{
+		fprintf(stderr, "Failed to write to log file.\n");
+			
+		fclose(file);
+		return false;
+	}
+	
+	if(length > 0)
+	{
+		fprintf(file, "- Payload: ");
+		print_payload(file, payload, length);
+	}
+	else
+	{
+		fprintf(file, "- Payload: <none>\n");
+	}
+	
+	if(fclose(file) != 0)
+	{
+		perror("fclose");
+		return false;
+	}
+	return true;
 }
 
 int main (int argc, char *argv[])
@@ -183,14 +232,7 @@ int main (int argc, char *argv[])
 	
 	while (running) {
 		struct sockaddr_in peer_addr;
-		int cfd = accept_connection(sfd,  &peer_addr);
-		
-		// Capture timestamp immediately upon accepting
-		time_t now = time(NULL);
-		struct tm *t_info = localtime(&now);
-		char time_buffer[64];
-		strftime(time_buffer, sizeof time_buffer, "%Y-%m-%d %H:%M:%S", t_info);
-		
+		int cfd = accept_connection(sfd,  &peer_addr);	
 		if(cfd < 0 && errno == EINTR && running == 0)
 		{
 			printf("\nSIGINT caught, shutting down...\n");
@@ -201,6 +243,12 @@ int main (int argc, char *argv[])
 			close(sfd);
 			return EXIT_FAILURE;
 		}
+		
+		// Capture timestamp immediately upon accepting
+		time_t now = time(NULL);
+		struct tm *t_info = localtime(&now);
+		char time_buffer[64];
+		strftime(time_buffer, sizeof time_buffer, "%Y-%m-%d %H:%M:%S", t_info);
 		
 		connection_count++;
 		
@@ -234,7 +282,20 @@ int main (int argc, char *argv[])
 		
 		char ip[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &peer_addr.sin_addr, ip, sizeof ip);
-		printf("click! [%d] [remote: %s] [%s]\n", connection_count, ip, time_buffer);
+		
+		char output_buffer[100];
+		int cx = snprintf(output_buffer, sizeof output_buffer, "click! [%d] [remote: %s] [%s]", connection_count, ip, time_buffer);
+		if(cx >= (int)sizeof output_buffer)
+		{
+			fprintf(stderr, "output_buffer is too small\n");
+		}
+		else if(cx < 0)
+		{
+			fprintf(stderr, "Encoding error\n");
+		}
+		
+		//printf("click! [%d] [remote: %s] [%s]\n", connection_count, ip, time_buffer);
+		printf("%s\n", output_buffer);
 		if(bytes_received == 0 || bytes_received < 0)
 		{
 			printf("- Payload: <none>\n");
@@ -242,10 +303,11 @@ int main (int argc, char *argv[])
 		else if(bytes_received > 0)
 		{
 			printf("- Payload: ");
-			print_payload(payload, bytes_received);
+			print_payload(stdout, payload, bytes_received);
 		}
 		
 		close(cfd);
+		log_connection(port, output_buffer, payload, bytes_received)
 	}
 	
 	printf("Connection attempts: %d\n", connection_count);
