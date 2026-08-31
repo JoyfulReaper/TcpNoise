@@ -314,9 +314,19 @@ int main (int argc, char *argv[])
 		struct connection_event event;
 		
 		// Capture timestamp immediately upon accepting
+		snprintf(event.timestamp, sizeof event.timestamp, "(unknown time)");
 		time_t now = time(NULL);
-		struct tm *t_info = localtime(&now);
-		strftime(event.timestamp, sizeof event.timestamp, "%Y-%m-%d %H:%M:%S", t_info);
+		if(now != (time_t) -1)
+		{
+			struct tm *t_info = localtime(&now);
+			if(t_info != NULL)
+			{
+				if(strftime(event.timestamp, sizeof event.timestamp, "%Y-%m-%d %H:%M:%S", t_info) == 0)
+				{
+					snprintf(event.timestamp, sizeof event.timestamp, "(unknown time)");
+				}
+			}
+		}
 		
 		connection_count++;
 		event.connection_number = connection_count;
