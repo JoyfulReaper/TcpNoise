@@ -14,8 +14,55 @@
 #include <arpa/inet.h>
 
 #define ENABLE_LOGGING
+#define MAX_SEEN_IPS 1000
 
 volatile sig_atomic_t running = 1;
+
+struct seen_ip
+{
+	char ip[INET_ADDRSTRLEN];
+	unsigned int count;
+};
+
+int find_seen_ip(
+	struct seen_ip records[],
+	size_t record_count,
+	const char *ip)
+{
+	for(size_t i = 0; i < record_count; i++)
+	{
+		if(strcmp(ip, records[i].ip) == 0)
+			return (int)i;
+	}
+	
+	return -1;
+}
+
+int increment_seen_ip(
+	struct seen_ip records[],
+	size_t *record_count,
+	const char *ip)
+{
+	int index = find_seen_ip(records, *record_count, ip);
+	if(index < 0) // We haven't see this IP address before
+	{
+		if(*record_count >= MAX_SEEN_IPS)
+		{
+			fprintf(stderr, "Seen IP buffer is full.\n");
+			return -1;
+		}
+		
+		records[*record_count].count = 1;
+		snprintf(records[*record_count].ip, sizeof records[*record_count].ip, "%s", ip);
+		
+		(*record_count)++;
+		
+		return 1;
+	}
+		
+	records[index].count++;
+	return records[index].count;
+}
 
 void print_usage(char *program)
 {
@@ -190,6 +237,7 @@ bool log_connection (
 
 int main (int argc, char *argv[])
 {
+	// Parse port
 	int port;
 	if(!process_arguments(argc, argv, &port))
 	{
@@ -197,6 +245,7 @@ int main (int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	
+	// Register signal handler
 	struct sigaction action;
 	memset(&action, 0, sizeof action);
 	action.sa_handler = handle_sigint;
@@ -208,6 +257,7 @@ int main (int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	
+	// Create, Bind and Listen on socket
 	int sfd = create_socket();
 	if (sfd < 0)
 	{
@@ -229,7 +279,10 @@ int main (int argc, char *argv[])
 	printf("Listening for noise on port: %d\n", port);
 	
 	int connection_count = 0;
+	struct seen_ip records[MAX_SEEN_IPS];
+	size_t record_count = 0;
 	
+	// Main loop
 	while (running) {
 		struct sockaddr_in peer_addr;
 		int cfd = accept_connection(sfd,  &peer_addr);	
@@ -266,7 +319,6 @@ int main (int argc, char *argv[])
 		
 		char payload[256];
 		ssize_t bytes_received;
-		
 		bytes_received = recv(cfd, payload, sizeof payload, 0);
 		
 		if(bytes_received < 0 && errno == EINTR && running == 0)
@@ -283,8 +335,15 @@ int main (int argc, char *argv[])
 		char ip[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &peer_addr.sin_addr, ip, sizeof ip);
 		
+		// Have we seen this IP before during this run?
+		int times_seen = increment_seen_ip(records, &record_count, ip);
+		if( times_seen < 0)
+		{
+			fprintf(stderr, "Failed to increment seen count\n");
+		}
+		
 		char output_buffer[100];
-		int cx = snprintf(output_buffer, sizeof output_buffer, "click! [%d] [remote: %s] [%s]", connection_count, ip, time_buffer);
+		int cx = snprintf(output_buffer, sizeof output_buffer, "click! [connection #%d] [port: %d] [remote: %s] [%s] [seen: %d]", connection_count, port, ip, time_buffer, times_seen);
 		if(cx >= (int)sizeof output_buffer)
 		{
 			fprintf(stderr, "output_buffer is too small\n");
@@ -297,8 +356,8 @@ int main (int argc, char *argv[])
 			close(cfd);
 			continue;
 		}
-		
-		//printf("click! [%d] [remote: %s] [%s]\n", connection_count, ip, time_buffer);
+
+		// Print final results
 		printf("%s\n", output_buffer);
 		if(bytes_received == 0 || bytes_received < 0)
 		{
