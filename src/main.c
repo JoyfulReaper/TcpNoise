@@ -52,7 +52,7 @@ int find_seen_ip(
 	return -1;
 }
 
-int increment_seen_ip(
+uint64_t increment_seen_ip(
 	struct seen_ip records[],
 	size_t *record_count,
 	const char *ip)
@@ -63,7 +63,7 @@ int increment_seen_ip(
 		if(*record_count >= MAX_SEEN_IPS)
 		{
 			fprintf(stderr, "Seen IP buffer is full.\n");
-			return -1;
+			return 0;
 		}
 		
 		records[*record_count].count = 1;
@@ -347,24 +347,27 @@ int main (int argc, char *argv[])
 			perror("recv");
 		}
 		
-		char ip[INET_ADDRSTRLEN];
-		inet_ntop(AF_INET, &peer_addr.sin_addr, ip, sizeof ip);
+		if(inet_ntop(AF_INET, &peer_addr.sin_addr, event.ip, sizeof event.ip) == NULL)
+		{
+			perror("inet_ntop");
+			snprintf(event.ip, sizeof event.ip, "%s", "(unknown)");
+		}
 		
 		// Have we seen this IP before during this run?
-		int times_seen = increment_seen_ip(records, &record_count, ip);
-		if( times_seen < 0)
+		event.seen_count = increment_seen_ip(records, &record_count, event.ip);
+		if( event.seen_count == 0)
 		{
 			fprintf(stderr, "Failed to increment seen count\n");
 		}
 		
 		char output_buffer[100];
 		int cx = snprintf(output_buffer, sizeof output_buffer, 
-			"click! [connection #%" PRIu64 "] [port: %hu] [remote: %s] [%s] [seen: %d]", 
+			"click! [connection #%" PRIu64 "] [port: %hu] [remote: %s] [%s] [seen: %" PRIu64"]", 
 			event.connection_number,
 			event.port,
-			ip, 
+			event.ip, 
 			event.timestamp, 
-			times_seen);
+			event.seen_count);
 		if(cx >= (int)sizeof output_buffer)
 		{
 			fprintf(stderr, "output_buffer is too small\n");
