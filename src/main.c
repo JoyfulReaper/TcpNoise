@@ -19,6 +19,7 @@
 #define MAX_SEEN_IPS 1000
 #define MAX_PAYLOAD_LEN 256
 #define LISTEN_BACKLOG 64
+#define MAX_PORT 10
 
 volatile sig_atomic_t running = 1;
 
@@ -81,29 +82,56 @@ uint64_t increment_seen_ip(
 
 void print_usage(char *program)
 {
-	fprintf(stderr, "Usage: %s <port>\n", program);
+	fprintf(stderr, "Usage: %s <port> [port ...]\n", program);
 }
 
-bool process_arguments (int argc, char *argv[], uint16_t *port)
+bool uint16_exists(const uint16_t *arr, size_t size, uint16_t target)
 {
-	if(argc != 2)
+	for (size_t i = 0; i < size; i++)
+	{
+		if (arr[i] == target)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool process_arguments(
+	int argc,
+	char *argv[],
+	uint16_t *ports,
+	size_t *port_count)
+{
+	if(argc < 2 || argc - 1 > MAX_PORT)
 	{
 		return false;
 	}
-	
-	char *end;
-	long value = strtol(argv[1], &end, 10);
-	
-	if(end == argv[1] || *end != '\0')
+
+	for(int i = 1; i < argc; i++)
 	{
-		return false;
+		char *end;
+		long value = strtol(argv[i], &end, 10);
+
+		if(end == argv[i] || *end != '\0')
+		{
+			return false;
+		}
+
+		if(value < 1 || value > 65535)
+		{
+			return false;
+		}
+
+		uint16_t parsed_port = (uint16_t)value;
+
+		if(!uint16_exists(ports, *port_count, parsed_port))
+		{
+			ports[*port_count] = parsed_port;
+			(*port_count)++;
+		}
 	}
-	
-	if (value < 1 || value > 65535)
-		return false;
-	
-	*port = (uint16_t)value;
-	
+
 	return true;
 }
 
@@ -261,8 +289,10 @@ bool log_connection (
 int main (int argc, char *argv[])
 {
 	// Parse port
-	uint16_t port;
-	if(!process_arguments(argc, argv, &port))
+	uint16_t ports[MAX_PORT];
+	size_t port_count = 0;
+	
+	if(!process_arguments(argc, argv, ports, &port_count))
 	{
 		print_usage(argv[0]);
 		return EXIT_FAILURE;
@@ -293,7 +323,7 @@ int main (int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	
-	if(!bind_socket(sfd, port))
+	if(!bind_socket(sfd, ports[0]))
 	{
 		close(sfd);
 		return EXIT_FAILURE;
@@ -305,7 +335,7 @@ int main (int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	
-	printf("Listening for noise on port: %d\n", port);
+	printf("Listening for noise on port: %hu\n", ports[0]);
 	
 	uint64_t connection_count = 0;
 	struct seen_ip records[MAX_SEEN_IPS];
@@ -345,7 +375,7 @@ int main (int argc, char *argv[])
 		
 		connection_count++;
 		event.connection_number = connection_count;
-		event.port = port;
+		event.port = ports[0];
 		
 		// Setup receive timeout
 		struct timeval timeout;
@@ -419,7 +449,7 @@ int main (int argc, char *argv[])
 		}
 		
 		close(cfd);
-		log_connection(port, output_buffer, event.payload, event.payload_len);
+		log_connection(ports[0], output_buffer, event.payload, event.payload_len);
 	}
 	
 	printf("Connection attempts: %" PRIu64 "\n", connection_count);
