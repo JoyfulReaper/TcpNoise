@@ -174,7 +174,7 @@ int accept_connection(int sfd, struct sockaddr_in *peer_addr)
 	return cfd;
 }
 
-void handle_sigint(int signal)
+void handle_signal(int signal)
 {
 	(void)signal;
 	running = 0;
@@ -271,12 +271,18 @@ int main (int argc, char *argv[])
 	// Register signal handler
 	struct sigaction action;
 	memset(&action, 0, sizeof action);
-	action.sa_handler = handle_sigint;
+	action.sa_handler = handle_signal;
 	sigemptyset(&action.sa_mask);
 	
 	if(sigaction(SIGINT, &action, NULL) == -1)
 	{
-		perror("sigaction");
+		perror("sigaction SIGINT");
+		return EXIT_FAILURE;
+	}
+	
+	if(sigaction(SIGTERM, &action, NULL) == -1)
+	{
+		perror("sigaction SIGTERM");
 		return EXIT_FAILURE;
 	}
 	
@@ -311,7 +317,7 @@ int main (int argc, char *argv[])
 		int cfd = accept_connection(sfd,  &peer_addr);	
 		if(cfd < 0 && errno == EINTR && running == 0)
 		{
-			printf("\nSIGINT caught, shutting down...\n");
+			printf("\nShutdown signal caught, shutting down...\n");
 			break;
 		}
 		else if(cfd < 0)
