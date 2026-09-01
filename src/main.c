@@ -109,10 +109,18 @@ bool process_arguments (int argc, char *argv[], uint16_t *port)
 int create_socket(void)
 {
 	int sfd;
+	int enabled = 1;
 	
 	if ((sfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 	{
 		perror("socket");
+		return -1;
+	}
+	
+	if(setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof enabled) == -1)
+	{
+		perror("setsockopt");
+		close(sfd);
 		return -1;
 	}
 	
