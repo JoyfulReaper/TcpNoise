@@ -18,6 +18,7 @@
 #define ENABLE_LOGGING
 #define MAX_SEEN_IPS 1000
 #define MAX_PAYLOAD_LEN 256
+#define LISTEN_BACKLOG 64
 
 volatile sig_atomic_t running = 1;
 
@@ -119,7 +120,7 @@ int create_socket(void)
 	
 	if(setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof enabled) == -1)
 	{
-		perror("setsockopt");
+		perror("setsockopt SO_REUSEADDR");
 		close(sfd);
 		return -1;
 	}
@@ -147,7 +148,7 @@ bool bind_socket(int sfd, uint16_t port)
 
 bool listen_socket(int sfd)
 {
-	if(listen(sfd, 5) != 0)
+	if(listen(sfd, LISTEN_BACKLOG) != 0)
 	{
 		perror("listen");
 		return false;
