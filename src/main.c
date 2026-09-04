@@ -385,6 +385,52 @@ void format_remote_endpoint(
 	}
 }
 
+bool resolve_remote(
+	const struct sockaddr_storage *peer_addr,
+	socklen_t peer_addr_size,
+	char *ip,
+	size_t ip_size,
+	uint16_t *remote_port)
+{
+	char service[NI_MAXSERV];
+	
+	int res = getnameinfo(
+		(const struct sockaddr *)peer_addr,
+		peer_addr_size,
+		ip,
+		ip_size,
+		service,
+		sizeof service,
+		NI_NUMERICHOST | NI_NUMERICSERV);
+		
+	if(res != 0)
+	{
+		fprintf(stderr, "getnameinfo: %s\n", gai_strerror(res));
+		snprintf(ip, ip_size, "%s", "(unknown)");
+		*remote_port = 0;
+		return false;
+	} else {		
+		char *end;
+		errno = 0;
+		
+		long parsed_port = strtol(service, &end, 10);
+		
+		if(errno == ERANGE ||
+		   end == service ||
+		   *end != '\0' ||
+		   parsed_port < 1 ||
+		   parsed_port > 65535)
+		{
+			fprintf(stderr, "Failed to parse remote port: %s\n", service);
+			*remote_port = 0;
+			return false;
+		}
+
+		*remote_port = (uint16_t)parsed_port;
+		return true;
+	}
+}
+
 int main (int argc, char *argv[])
 {
 	// Parse port
@@ -493,7 +539,6 @@ int main (int argc, char *argv[])
 			{
 				struct sockaddr_storage peer_addr;
 				socklen_t peer_addr_size = sizeof peer_addr;
-				char service[NI_MAXSERV];
 				int cfd = accept_connection(listeners[i].fd, &peer_addr, &peer_addr_size);
 				
 				if(cfd < 0 && errno == EINTR && running == 0)
@@ -544,38 +589,12 @@ int main (int argc, char *argv[])
 				}
 				
 				// Get remote information
-				int res = getnameinfo(
-					(struct sockaddr *)&peer_addr,
+				resolve_remote(
+					&peer_addr,
 					peer_addr_size,
 					event.ip,
 					sizeof event.ip,
-					service,
-					sizeof service,
-					NI_NUMERICHOST | NI_NUMERICSERV);
-				if(res != 0)
-				{
-					fprintf(stderr, "getnameinfo: %s\n", gai_strerror(res));
-					snprintf(event.ip, sizeof event.ip, "%s", "(unknown)");
-					event.remote_port = 0;
-				} else {		
-					char *end;
-					errno = 0;
-					
-					long remote_port = strtol(service, &end, 10);
-					if(errno == ERANGE ||
-					   end == service ||
-					   *end != '\0' ||
-					   remote_port < 1 ||
-					   remote_port > 65535)
-					{
-						fprintf(stderr, "Failed to parse remote port: %s\n", service);
-						event.remote_port = 0;
-					}
-					else
-					{
-						event.remote_port = (uint16_t)remote_port;
-					}
-				}
+					&event.remote_port);
 								
 				// Have we seen this IP before during this run?
 				event.seen_count = increment_seen_ip(records, &record_count, event.ip);
