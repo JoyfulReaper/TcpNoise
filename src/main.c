@@ -358,6 +358,33 @@ void capture_timestamp(char *buffer, size_t buffer_size)
 	}
 }
 
+void format_remote_endpoint(
+	char *buffer,
+	size_t buffer_size,
+	int family,
+	const char *ip,
+	uint16_t port)
+{
+	if(family == AF_INET6)
+	{
+		snprintf(
+			buffer,
+			buffer_size,
+			"[%s]:%" PRIu16,
+			ip,
+			port);
+	}
+	else
+	{
+		snprintf(
+			buffer,
+			buffer_size,
+			"%s:%" PRIu16,
+			ip,
+			port);
+	}
+}
+
 int main (int argc, char *argv[])
 {
 	// Parse port
@@ -558,22 +585,12 @@ int main (int argc, char *argv[])
 				}
 				
 				char remote_endpoint[INET6_ADDRSTRLEN + 8];
-				if(peer_addr.ss_family == AF_INET6)
-				{
-					snprintf(
-						remote_endpoint,
-						sizeof remote_endpoint,
-						"[%s]:%" PRIu16,
-						event.ip,
-						event.remote_port);
-				} else {
-					snprintf(
-						remote_endpoint,
-						sizeof remote_endpoint,
-						"%s:%" PRIu16,
-						event.ip,
-						event.remote_port);
-				}
+				format_remote_endpoint(
+					remote_endpoint,
+					sizeof remote_endpoint,
+					peer_addr.ss_family,
+					event.ip,
+					event.remote_port);
 				
 				const char *family_name =
 					listeners[i].family == AF_INET6 ? "IPv6" : "IPv4";
