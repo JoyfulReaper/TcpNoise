@@ -7,6 +7,7 @@
 #include <time.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <poll.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -310,6 +311,8 @@ int main (int argc, char *argv[])
 	struct listener listeners[MAX_PORT];
 	size_t listener_count = 0;
 	
+	struct pollfd pollfds[MAX_PORT];
+	
 	if(!process_arguments(argc, argv, ports, &port_count))
 	{
 		print_usage(argv[0]);
@@ -340,6 +343,10 @@ int main (int argc, char *argv[])
 		listeners[i].family = AF_INET;
 		listeners[i].port = ports[i];
 		listeners[i].fd = create_socket();
+		
+		pollfds[i].fd = listeners[i].fd;
+		pollfds[i].events = POLLIN;
+		pollfds[i].revents = 0;
 		
 		if (listeners[i].fd < 0)
 		{
@@ -372,113 +379,134 @@ int main (int argc, char *argv[])
 	
 	// Main loop
 	while (running) {
-		struct sockaddr_in peer_addr;
-		int cfd = accept_connection(listeners[0].fd,  &peer_addr);	
-		if(cfd < 0 && errno == EINTR && running == 0)
+		int num_selected = poll(pollfds, listener_count, -1);
+		if(num_selected == -1 && errno == EINTR && running == 0)
 		{
 			printf("\nShutdown signal caught, shutting down...\n");
 			break;
 		}
-		else if(cfd < 0)
+		if (num_selected == -1)
 		{
+			perror("poll");
 			close_listeners(listeners, listener_count);
 			return EXIT_FAILURE;
 		}
 		
-		struct connection_event event;
-		
-		// Capture timestamp immediately upon accepting
-		snprintf(event.timestamp, sizeof event.timestamp, "(unknown time)");
-		time_t now = time(NULL);
-		if(now != (time_t) -1)
+		for(size_t i = 0; i < listener_count; i++)
 		{
-			struct tm *t_info = localtime(&now);
-			if(t_info != NULL)
+			if(pollfds[i].revents & POLLIN)
 			{
-				if(strftime(event.timestamp, sizeof event.timestamp, "%Y-%m-%d %H:%M:%S", t_info) == 0)
+				struct sockaddr_in peer_addr;
+				int cfd = accept_connection(listeners[i].fd, &peer_addr);
+				
+				if(cfd < 0 && errno == EINTR && running == 0)
 				{
-					snprintf(event.timestamp, sizeof event.timestamp, "(unknown time)");
+					printf("\nShutdown signal caught, shutting down...\n");
+					break;
 				}
+				else if(cfd < 0)
+				{
+					close_listeners(listeners, listener_count);
+					return EXIT_FAILURE;
+				}
+				
+				struct connection_event event;
+				
+				// Capture timestamp immediately upon accepting
+				snprintf(event.timestamp, sizeof event.timestamp, "(unknown time)");
+				time_t now = time(NULL);
+				if(now != (time_t) -1)
+				{
+					struct tm *t_info = localtime(&now);
+					if(t_info != NULL)
+					{
+						if(strftime(event.timestamp, sizeof event.timestamp, "%Y-%m-%d %H:%M:%S", t_info) == 0)
+						{
+							snprintf(event.timestamp, sizeof event.timestamp, "(unknown time)");
+						}
+					}
+				}
+				
+				connection_count++;
+				event.connection_number = connection_count;
+				event.port = listeners[i].port;
+				
+				// Setup receive timeout
+				struct timeval timeout;
+				timeout.tv_sec = 0;
+				timeout.tv_usec = 250000;
+				
+				if(setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) != 0)
+				{
+					close(cfd);
+					close_listeners(listeners, listener_count);
+					perror("setsockopt");
+					return EXIT_FAILURE;
+				} 
+				
+				event.payload_len = recv(cfd, event.payload, sizeof event.payload, 0);
+				if(event.payload_len < 0 && errno == EINTR && running == 0)
+				{
+					close(cfd);
+					break;
+				}
+				
+				if(event.payload_len < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+				{
+					perror("recv");
+				}
+				
+				if(inet_ntop(AF_INET, &peer_addr.sin_addr, event.ip, sizeof event.ip) == NULL)
+				{
+					perror("inet_ntop");
+					snprintf(event.ip, sizeof event.ip, "%s", "(unknown)");
+				}
+				
+				// Have we seen this IP before during this run?
+				event.seen_count = increment_seen_ip(records, &record_count, event.ip);
+				if( event.seen_count == 0)
+				{
+					fprintf(stderr, "Failed to increment seen count\n");
+				}
+				
+				char output_buffer[100];
+				int cx = snprintf(output_buffer, sizeof output_buffer, 
+					"click! [connection #%" PRIu64 "] [port: %hu] [remote: %s] [%s] [seen: %" PRIu64"]", 
+					event.connection_number,
+					event.port,
+					event.ip, 
+					event.timestamp, 
+					event.seen_count);
+				if(cx >= (int)sizeof output_buffer)
+				{
+					fprintf(stderr, "output_buffer is too small\n");
+					close(cfd);
+					continue;
+				}
+				else if(cx < 0)
+				{
+					fprintf(stderr, "Encoding error\n");
+					close(cfd);
+					continue;
+				}
+
+				// Print final results
+				printf("%s\n", output_buffer);
+				if(event.payload_len == 0 || event.payload_len < 0)
+				{
+					printf("- Payload: <none>\n");
+				}
+				else if(event.payload_len > 0)
+				{
+					printf("- Payload: ");
+					print_payload(stdout, event.payload, event.payload_len);
+				}
+				
+				close(cfd);
+				log_connection(listeners[i].port, output_buffer, event.payload, event.payload_len);
+				
 			}
 		}
-		
-		connection_count++;
-		event.connection_number = connection_count;
-		event.port = listeners[0].port;
-		
-		// Setup receive timeout
-		struct timeval timeout;
-		timeout.tv_sec = 0;
-		timeout.tv_usec = 250000;
-		
-		if(setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) != 0)
-		{
-			close(cfd);
-			close_listeners(listeners, listener_count);
-			perror("setsockopt");
-			return EXIT_FAILURE;
-		} 
-		
-		event.payload_len = recv(cfd, event.payload, sizeof event.payload, 0);
-		if(event.payload_len < 0 && errno == EINTR && running == 0)
-		{
-			close(cfd);
-			break;
-		}
-		
-		if(event.payload_len < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
-		{
-			perror("recv");
-		}
-		
-		if(inet_ntop(AF_INET, &peer_addr.sin_addr, event.ip, sizeof event.ip) == NULL)
-		{
-			perror("inet_ntop");
-			snprintf(event.ip, sizeof event.ip, "%s", "(unknown)");
-		}
-		
-		// Have we seen this IP before during this run?
-		event.seen_count = increment_seen_ip(records, &record_count, event.ip);
-		if( event.seen_count == 0)
-		{
-			fprintf(stderr, "Failed to increment seen count\n");
-		}
-		
-		char output_buffer[100];
-		int cx = snprintf(output_buffer, sizeof output_buffer, 
-			"click! [connection #%" PRIu64 "] [port: %hu] [remote: %s] [%s] [seen: %" PRIu64"]", 
-			event.connection_number,
-			event.port,
-			event.ip, 
-			event.timestamp, 
-			event.seen_count);
-		if(cx >= (int)sizeof output_buffer)
-		{
-			fprintf(stderr, "output_buffer is too small\n");
-			close(cfd);
-			continue;
-		}
-		else if(cx < 0)
-		{
-			fprintf(stderr, "Encoding error\n");
-			close(cfd);
-			continue;
-		}
-
-		// Print final results
-		printf("%s\n", output_buffer);
-		if(event.payload_len == 0 || event.payload_len < 0)
-		{
-			printf("- Payload: <none>\n");
-		}
-		else if(event.payload_len > 0)
-		{
-			printf("- Payload: ");
-			print_payload(stdout, event.payload, event.payload_len);
-		}
-		
-		close(cfd);
-		log_connection(listeners[0].port, output_buffer, event.payload, event.payload_len);
 	}
 	
 	close_listeners(listeners, listener_count);

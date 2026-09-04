@@ -12,6 +12,6 @@ ctodo
 todos.txt
 
 tcpnoise
-
+*.log
 *.o
 *.core
