@@ -565,15 +565,24 @@ int main (int argc, char *argv[])
 						event.remote_port);
 				}
 				
+				const char *family_name =
+					listeners[i].family == AF_INET6 ? "IPv6" : "IPv4";
+				const char *console_time = event.timestamp;
+				if(strlen(event.timestamp) >= 19)
+				{
+					console_time = event.timestamp + 11;
+				}
 				char output_buffer[256];
+				
 				int cx = snprintf(
 					output_buffer,
 					sizeof output_buffer,
-					"click! [connection #%" PRIu64 "] [port: %hu] [remote: %s] [%s] [seen: %" PRIu64 "]",
+					"[%s] connection #%" PRIu64 "  TCP/%hu  %s  %s  seen=%" PRIu64,
+					console_time,
 					event.connection_number,
 					event.port,
+					family_name,
 					remote_endpoint,
-					event.timestamp,
 					event.seen_count);
 				if(cx >= (int)sizeof output_buffer)
 				{
