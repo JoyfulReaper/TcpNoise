@@ -28,7 +28,7 @@ volatile sig_atomic_t running = 1;
 
 struct seen_ip
 {
-	char ip[INET_ADDRSTRLEN];
+	char ip[INET6_ADDRSTRLEN];
 	unsigned int count;
 };
 
@@ -414,7 +414,8 @@ int main (int argc, char *argv[])
 			
 			listener_count++;
 			
-			printf("Listening for noise on port: %hu\n", listeners[listener_index].port);
+			const char *family_name = listeners[listener_index].family == AF_INET ? "IPv4" : "IPv6";
+			printf("Listening for noise on port: %hu (%s)\n", listeners[listener_index].port, family_name);
 		}
 	}
 	
@@ -546,15 +547,32 @@ int main (int argc, char *argv[])
 					fprintf(stderr, "Failed to increment seen count\n");
 				}
 				
-				char output_buffer[100];
+				char remote_endpoint[INET6_ADDRSTRLEN + 8];
+				if(peer_addr.ss_family == AF_INET6)
+				{
+					snprintf(
+						remote_endpoint,
+						sizeof remote_endpoint,
+						"[%s]:%" PRIu16,
+						event.ip,
+						event.remote_port);
+				} else {
+					snprintf(
+						remote_endpoint,
+						sizeof remote_endpoint,
+						"%s:%" PRIu16,
+						event.ip,
+						event.remote_port);
+				}
+				
+				char output_buffer[256];
 				int cx = snprintf(
 					output_buffer,
 					sizeof output_buffer,
-					"click! [connection #%" PRIu64 "] [port: %hu] [remote: %s:%" PRIu16 "] [%s] [seen: %" PRIu64 "]",
+					"click! [connection #%" PRIu64 "] [port: %hu] [remote: %s] [%s] [seen: %" PRIu64 "]",
 					event.connection_number,
 					event.port,
-					event.ip,
-					event.remote_port,
+					remote_endpoint,
 					event.timestamp,
 					event.seen_count);
 				if(cx >= (int)sizeof output_buffer)
