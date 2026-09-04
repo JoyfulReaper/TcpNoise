@@ -202,11 +202,10 @@ bool listen_socket(int sfd)
 	return true;
 }
 
-int accept_connection(int sfd, struct sockaddr_in *peer_addr)
+int accept_connection(int sfd, struct sockaddr_storage *peer_addr, socklen_t *peer_addr_size)
 {
 	int cfd;
-	socklen_t peer_addr_size = sizeof *peer_addr;
-	if((cfd = accept(sfd, (struct sockaddr *)peer_addr, &peer_addr_size)) < 0)
+	if((cfd = accept(sfd, (struct sockaddr *)peer_addr, peer_addr_size)) < 0)
 	{
 		if (errno != EINTR)
 		{
@@ -393,12 +392,14 @@ int main (int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 		
+		// Poll
 		for(size_t i = 0; i < listener_count; i++)
 		{
 			if(pollfds[i].revents & POLLIN)
 			{
-				struct sockaddr_in peer_addr;
-				int cfd = accept_connection(listeners[i].fd, &peer_addr);
+				struct sockaddr_storage peer_addr;
+				socklen_t peer_addr_size = sizeof peer_addr;
+				int cfd = accept_connection(listeners[i].fd, &peer_addr, &peer_addr_size);
 				
 				if(cfd < 0 && errno == EINTR && running == 0)
 				{
@@ -457,7 +458,9 @@ int main (int argc, char *argv[])
 					perror("recv");
 				}
 				
-				if(inet_ntop(AF_INET, &peer_addr.sin_addr, event.ip, sizeof event.ip) == NULL)
+				struct sockaddr_in *peer4 = (struct sockaddr_in *)&peer_addr;
+				
+				if(inet_ntop(AF_INET, &peer4->sin_addr, event.ip, sizeof event.ip) == NULL)
 				{
 					perror("inet_ntop");
 					snprintf(event.ip, sizeof event.ip, "%s", "(unknown)");
