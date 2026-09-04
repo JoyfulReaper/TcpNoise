@@ -22,6 +22,7 @@
 #define MAX_PAYLOAD_LEN 256
 #define LISTEN_BACKLOG 64
 #define MAX_PORT 10
+#define MAX_LISTENERS (MAX_PORT * 2)
 
 volatile sig_atomic_t running = 1;
 
@@ -36,7 +37,7 @@ struct listener
 	int fd;
 	uint16_t port;
 	int family;
-	uint64_t connection_count;
+	size_t port_index;
 };
 
 struct connection_event
@@ -331,10 +332,12 @@ int main (int argc, char *argv[])
 	uint16_t ports[MAX_PORT];
 	size_t port_count = 0;
 	
-	struct listener listeners[MAX_PORT];
+	struct listener listeners[MAX_LISTENERS];
 	size_t listener_count = 0;
 	
-	struct pollfd pollfds[MAX_PORT];
+	uint64_t connection_counts[MAX_PORT] = {0};
+	
+	struct pollfd pollfds[MAX_LISTENERS];
 	
 	if(!process_arguments(argc, argv, ports, &port_count))
 	{
@@ -366,7 +369,7 @@ int main (int argc, char *argv[])
 		listeners[i].family = AF_INET;
 		listeners[i].port = ports[i];
 		listeners[i].fd = create_socket(listeners[i].family);
-		listeners[i].connection_count = 0;
+		listeners[i].port_index = i;
 		
 		pollfds[i].fd = listeners[i].fd;
 		pollfds[i].events = POLLIN;
@@ -453,8 +456,9 @@ int main (int argc, char *argv[])
 					}
 				}
 				
-				listeners[i].connection_count++;
-				event.connection_number = listeners[i].connection_count;
+				size_t port_index = listeners[i].port_index;
+				connection_counts[port_index]++;
+				event.connection_number = connection_counts[port_index];
 				event.port = listeners[i].port;
 				
 				// Setup receive timeout
@@ -568,9 +572,9 @@ int main (int argc, char *argv[])
 	}
 	
 	close_listeners(listeners, listener_count);
-	for(size_t i = 0; i < listener_count; i++)
+	for(size_t i = 0; i < port_count; i++)
 	{
-		printf("Port %"PRIu16" connection attempts: %" PRIu64 "\n", listeners[i].port,listeners[i].connection_count);
+		printf("Port %"PRIu16" connection attempts: %" PRIu64 "\n", ports[i], connection_counts[i]);
 	}
 	
 	return EXIT_SUCCESS;
