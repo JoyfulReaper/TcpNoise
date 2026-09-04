@@ -165,6 +165,16 @@ int create_socket(int family)
 		return -1;
 	}
 	
+	if(family == AF_INET6)
+	{
+		if(setsockopt(sfd, IPPROTO_IPV6, IPV6_V6ONLY, &enabled, sizeof enabled) == -1)
+		{
+			perror("setsockopt IPV6_V6ONLY");
+			close(sfd);
+			return -1;
+		}
+	}
+	
 	return sfd;
 }
 
@@ -339,6 +349,9 @@ int main (int argc, char *argv[])
 	
 	struct pollfd pollfds[MAX_LISTENERS];
 	
+	int families[] = { AF_INET, AF_INET6 };
+	size_t family_count = sizeof families / sizeof families[0];
+	
 	if(!process_arguments(argc, argv, ports, &port_count))
 	{
 		print_usage(argv[0]);
@@ -366,38 +379,43 @@ int main (int argc, char *argv[])
 	// Create, Bind and Listen on socket
 	for(size_t i = 0; i < port_count; i++)
 	{
-		listeners[i].family = AF_INET;
-		listeners[i].port = ports[i];
-		listeners[i].fd = create_socket(listeners[i].family);
-		listeners[i].port_index = i;
-		
-		pollfds[i].fd = listeners[i].fd;
-		pollfds[i].events = POLLIN;
-		pollfds[i].revents = 0;
-		
-		if (listeners[i].fd < 0)
+		for(size_t f = 0; f < family_count; f++)
 		{
-			close_listeners(listeners, listener_count);
-			return EXIT_FAILURE;
+			size_t listener_index = listener_count;
+			
+			listeners[listener_index].family = families[f];
+			listeners[listener_index].port = ports[i];
+			listeners[listener_index].port_index = i;
+			listeners[listener_index].fd = create_socket(listeners[listener_index].family);
+			
+			if (listeners[listener_index].fd < 0)
+			{
+				close_listeners(listeners, listener_count);
+				return EXIT_FAILURE;
+			}
+			
+			if(!bind_socket(listeners[listener_index].fd, listeners[listener_index].port, listeners[listener_index].family))
+			{
+				close(listeners[listener_index].fd);
+				close_listeners(listeners, listener_count);
+				return EXIT_FAILURE;
+			}
+			
+			if(!listen_socket(listeners[listener_index].fd))
+			{
+				close(listeners[listener_index].fd);
+				close_listeners(listeners, listener_count);
+				return EXIT_FAILURE;
+			}
+			
+			pollfds[listener_index].fd = listeners[listener_index].fd;
+			pollfds[listener_index].events = POLLIN;
+			pollfds[listener_index].revents = 0;
+			
+			listener_count++;
+			
+			printf("Listening for noise on port: %hu\n", listeners[listener_index].port);
 		}
-		
-		if(!bind_socket(listeners[i].fd, listeners[i].port, listeners[i].family))
-		{
-			close(listeners[i].fd);
-			close_listeners(listeners, listener_count);
-			return EXIT_FAILURE;
-		}
-		
-		if(!listen_socket(listeners[i].fd))
-		{
-			close(listeners[i].fd);
-			close_listeners(listeners, listener_count);
-			return EXIT_FAILURE;
-		}
-		
-		listener_count++;
-		
-		printf("Listening for noise on port: %hu\n", listeners[i].port);
 	}
 	
 	struct seen_ip records[MAX_SEEN_IPS];
