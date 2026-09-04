@@ -625,11 +625,11 @@ int main (int argc, char *argv[])
 				printf("%s\n", output_buffer);
 				if(event.payload_len == 0 || event.payload_len < 0)
 				{
-					printf("- Payload: <none>\n");
+					printf("           payload: <none>\n");
 				}
 				else if(event.payload_len > 0)
 				{
-					printf("- Payload: ");
+					printf("           payload: ");
 					print_payload(stdout, event.payload, event.payload_len);
 				}
 				
