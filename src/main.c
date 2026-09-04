@@ -35,6 +35,7 @@ struct listener
 	int fd;
 	uint16_t port;
 	int family;
+	uint64_t connection_count;
 };
 
 struct connection_event
@@ -343,6 +344,7 @@ int main (int argc, char *argv[])
 		listeners[i].family = AF_INET;
 		listeners[i].port = ports[i];
 		listeners[i].fd = create_socket();
+		listeners[i].connection_count = 0;
 		
 		pollfds[i].fd = listeners[i].fd;
 		pollfds[i].events = POLLIN;
@@ -373,7 +375,6 @@ int main (int argc, char *argv[])
 		printf("Listening for noise on port: %hu\n", listeners[i].port);
 	}
 	
-	uint64_t connection_count = 0;
 	struct seen_ip records[MAX_SEEN_IPS];
 	size_t record_count = 0;
 	
@@ -427,8 +428,8 @@ int main (int argc, char *argv[])
 					}
 				}
 				
-				connection_count++;
-				event.connection_number = connection_count;
+				listeners[i].connection_count++;
+				event.connection_number = listeners[i].connection_count;
 				event.port = listeners[i].port;
 				
 				// Setup receive timeout
@@ -510,7 +511,10 @@ int main (int argc, char *argv[])
 	}
 	
 	close_listeners(listeners, listener_count);
-	printf("Connection attempts: %" PRIu64 "\n", connection_count);
+	for(size_t i = 0; i < listener_count; i++)
+	{
+		printf("Port %"PRIu16" connection attempts: %" PRIu64 "\n", listeners[i].port,listeners[i].connection_count);
+	}
 	
 	return EXIT_SUCCESS;
 }
