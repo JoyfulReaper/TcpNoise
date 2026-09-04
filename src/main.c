@@ -146,12 +146,12 @@ bool process_arguments(
 	return true;
 }
 
-int create_socket(void)
+int create_socket(int family)
 {
 	int sfd;
 	int enabled = 1;
 	
-	if ((sfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+	if ((sfd = socket(family, SOCK_STREAM, 0)) < 0)
 	{
 		perror("socket");
 		return -1;
@@ -167,20 +167,41 @@ int create_socket(void)
 	return sfd;
 }
 
-bool bind_socket(int sfd, uint16_t port)
-{
-	struct sockaddr_in address;
-	memset(&address, 0, sizeof address);
-	
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons(port);
-	
-	if(bind(sfd, (struct sockaddr*)&address, sizeof address) != 0)
+bool bind_socket(int sfd, uint16_t port, int family)
+{	
+	if(family == AF_INET)
 	{
-		perror("bind");
+		struct sockaddr_in address;
+		memset(&address, 0, sizeof address);
+		address.sin_family = AF_INET;
+		address.sin_addr.s_addr = INADDR_ANY;
+		address.sin_port = htons(port);
+		
+		if(bind(sfd, (struct sockaddr*)&address, sizeof address) != 0)
+		{
+			perror("bind");
+			return false;
+		} 
+	}
+	else if (family == AF_INET6)
+	{
+		struct sockaddr_in6 address;
+		memset(&address, 0, sizeof address);
+		address.sin6_family = AF_INET6;
+		address.sin6_addr = in6addr_any;
+		address.sin6_port = htons(port);
+		
+		if(bind(sfd, (struct sockaddr*)&address, sizeof address) != 0)
+		{
+			perror("bind");
+			return false;
+		} 
+	}
+	else
+	{
+		fprintf(stderr, "Invalid family\n");
 		return false;
-	} 
+	}
 	
 	return true;
 }
@@ -344,7 +365,7 @@ int main (int argc, char *argv[])
 	{
 		listeners[i].family = AF_INET;
 		listeners[i].port = ports[i];
-		listeners[i].fd = create_socket();
+		listeners[i].fd = create_socket(listeners[i].family);
 		listeners[i].connection_count = 0;
 		
 		pollfds[i].fd = listeners[i].fd;
@@ -357,7 +378,7 @@ int main (int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 		
-		if(!bind_socket(listeners[i].fd, listeners[i].port))
+		if(!bind_socket(listeners[i].fd, listeners[i].port, listeners[i].family))
 		{
 			close(listeners[i].fd);
 			close_listeners(listeners, listener_count);
