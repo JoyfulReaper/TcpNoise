@@ -29,6 +29,13 @@ struct seen_ip
 	unsigned int count;
 };
 
+struct listener
+{
+	int fd;
+	uint16_t port;
+	int family;
+};
+
 struct connection_event
 {
 	uint64_t connection_number;
@@ -317,25 +324,31 @@ int main (int argc, char *argv[])
 	}
 	
 	// Create, Bind and Listen on socket
-	int sfd = create_socket();
-	if (sfd < 0)
+	struct listener listener = {
+		.port = ports[0],
+		.family = AF_INET,
+		.fd = -1
+	};
+	
+	listener.fd = create_socket();
+	if (listener.fd < 0)
 	{
 		return EXIT_FAILURE;
 	}
 	
-	if(!bind_socket(sfd, ports[0]))
+	if(!bind_socket(listener.fd, listener.port))
 	{
-		close(sfd);
+		close(listener.fd);
 		return EXIT_FAILURE;
 	}
 	
-	if(!listen_socket(sfd))
+	if(!listen_socket(listener.fd))
 	{
-		close(sfd);
+		close(listener.fd);
 		return EXIT_FAILURE;
 	}
 	
-	printf("Listening for noise on port: %hu\n", ports[0]);
+	printf("Listening for noise on port: %hu\n", listener.port);
 	
 	uint64_t connection_count = 0;
 	struct seen_ip records[MAX_SEEN_IPS];
@@ -344,7 +357,7 @@ int main (int argc, char *argv[])
 	// Main loop
 	while (running) {
 		struct sockaddr_in peer_addr;
-		int cfd = accept_connection(sfd,  &peer_addr);	
+		int cfd = accept_connection(listener.fd,  &peer_addr);	
 		if(cfd < 0 && errno == EINTR && running == 0)
 		{
 			printf("\nShutdown signal caught, shutting down...\n");
@@ -352,7 +365,7 @@ int main (int argc, char *argv[])
 		}
 		else if(cfd < 0)
 		{
-			close(sfd);
+			close(listener.fd);
 			return EXIT_FAILURE;
 		}
 		
@@ -375,7 +388,7 @@ int main (int argc, char *argv[])
 		
 		connection_count++;
 		event.connection_number = connection_count;
-		event.port = ports[0];
+		event.port = listener.port;
 		
 		// Setup receive timeout
 		struct timeval timeout;
@@ -385,7 +398,7 @@ int main (int argc, char *argv[])
 		if(setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) != 0)
 		{
 			close(cfd);
-			close(sfd);
+			close(listener.fd);
 			perror("setsockopt");
 			return EXIT_FAILURE;
 		} 
@@ -449,11 +462,11 @@ int main (int argc, char *argv[])
 		}
 		
 		close(cfd);
-		log_connection(ports[0], output_buffer, event.payload, event.payload_len);
+		log_connection(listener.port, output_buffer, event.payload, event.payload_len);
 	}
 	
 	printf("Connection attempts: %" PRIu64 "\n", connection_count);
 	
-	close(sfd);
+	close(listener.fd);
 	return EXIT_SUCCESS;
 }
