@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <poll.h>
+#include <netdb.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -42,6 +43,7 @@ struct connection_event
 {
 	uint64_t connection_number;
 	uint16_t port;
+	uint16_t remote_port;
 	char ip[INET6_ADDRSTRLEN];
 	uint64_t seen_count;
 	char timestamp[64];
@@ -399,6 +401,7 @@ int main (int argc, char *argv[])
 			{
 				struct sockaddr_storage peer_addr;
 				socklen_t peer_addr_size = sizeof peer_addr;
+				char service[NI_MAXSERV];
 				int cfd = accept_connection(listeners[i].fd, &peer_addr, &peer_addr_size);
 				
 				if(cfd < 0 && errno == EINTR && running == 0)
@@ -446,6 +449,7 @@ int main (int argc, char *argv[])
 					return EXIT_FAILURE;
 				} 
 				
+				// Read payload
 				event.payload_len = recv(cfd, event.payload, sizeof event.payload, 0);
 				if(event.payload_len < 0 && errno == EINTR && running == 0)
 				{
@@ -458,14 +462,40 @@ int main (int argc, char *argv[])
 					perror("recv");
 				}
 				
-				struct sockaddr_in *peer4 = (struct sockaddr_in *)&peer_addr;
-				
-				if(inet_ntop(AF_INET, &peer4->sin_addr, event.ip, sizeof event.ip) == NULL)
+				// Get remote information
+				int res = getnameinfo(
+					(struct sockaddr *)&peer_addr,
+					peer_addr_size,
+					event.ip,
+					sizeof event.ip,
+					service,
+					sizeof service,
+					NI_NUMERICHOST | NI_NUMERICSERV);
+				if(res != 0)
 				{
-					perror("inet_ntop");
+					fprintf(stderr, "getnameinfo: %s\n", gai_strerror(res));
 					snprintf(event.ip, sizeof event.ip, "%s", "(unknown)");
+					event.remote_port = 0;
+				} else {		
+					char *end;
+					errno = 0;
+					
+					long remote_port = strtol(service, &end, 10);
+					if(errno == ERANGE ||
+					   end == service ||
+					   *end != '\0' ||
+					   remote_port < 1 ||
+					   remote_port > 65535)
+					{
+						fprintf(stderr, "Failed to parse remote port: %s\n", service);
+						event.remote_port = 0;
+					}
+					else
+					{
+						event.remote_port = (uint16_t)remote_port;
+					}
 				}
-				
+								
 				// Have we seen this IP before during this run?
 				event.seen_count = increment_seen_ip(records, &record_count, event.ip);
 				if( event.seen_count == 0)
@@ -474,12 +504,15 @@ int main (int argc, char *argv[])
 				}
 				
 				char output_buffer[100];
-				int cx = snprintf(output_buffer, sizeof output_buffer, 
-					"click! [connection #%" PRIu64 "] [port: %hu] [remote: %s] [%s] [seen: %" PRIu64"]", 
+				int cx = snprintf(
+					output_buffer,
+					sizeof output_buffer,
+					"click! [connection #%" PRIu64 "] [port: %hu] [remote: %s:%" PRIu16 "] [%s] [seen: %" PRIu64 "]",
 					event.connection_number,
 					event.port,
-					event.ip, 
-					event.timestamp, 
+					event.ip,
+					event.remote_port,
+					event.timestamp,
 					event.seen_count);
 				if(cx >= (int)sizeof output_buffer)
 				{
