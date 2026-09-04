@@ -52,6 +52,15 @@ struct connection_event
 	ssize_t payload_len;
 };
 
+enum receive_status
+{
+	RECEIVE_DATA,
+	RECEIVE_CLOSED,
+	RECEIVE_TIMEOUT,
+	RECEIVE_INTERRUPTED,
+	RECEIVE_ERROR
+};
+
 int find_seen_ip(
 	struct seen_ip records[],
 	size_t record_count,
@@ -451,12 +460,27 @@ bool set_receive_timeout(int cfd)
 	return true;
 }
 
-ssize_t receive_payload(
+enum receive_status receive_payload(
 	int cfd,
 	char *buffer,
-	size_t buffer_size)
+	size_t buffer_size,
+	ssize_t *bytes_received)
 	{
-		return recv(cfd, buffer, buffer_size, 0);
+		*bytes_received = recv(cfd, buffer, buffer_size, 0);
+		
+		if(*bytes_received > 0)
+			return RECEIVE_DATA;
+		
+		if(*bytes_received == 0)
+			return RECEIVE_CLOSED;
+			
+		if(errno == EAGAIN || errno == EWOULDBLOCK)
+			return RECEIVE_TIMEOUT;
+			
+		if(errno == EINTR)
+			return RECEIVE_INTERRUPTED;
+		
+		return RECEIVE_ERROR;
 	}
 
 int main (int argc, char *argv[])
@@ -599,14 +623,20 @@ int main (int argc, char *argv[])
 				}
 				
 				// Read payload
-				event.payload_len = receive_payload(cfd, event.payload, sizeof event.payload);
-				if(event.payload_len < 0 && errno == EINTR && running == 0)
+				enum receive_status payload_result = 
+					receive_payload(cfd, event.payload, sizeof event.payload, &event.payload_len);
+				if(payload_result == RECEIVE_INTERRUPTED)
 				{
-					close(cfd);
-					break;
+					if(!running)
+					{
+						close(cfd);
+						break;
+					}
+					
+					perror("recv");
 				}
 				
-				if(event.payload_len < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+				if(payload_result == RECEIVE_ERROR)
 				{
 					perror("recv");
 				}
