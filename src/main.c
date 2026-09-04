@@ -181,6 +181,14 @@ bool bind_socket(int sfd, uint16_t port)
 	return true;
 }
 
+void close_listeners(struct listener listeners[], size_t listener_count)
+{
+	for(size_t i = 0; i < listener_count; i++)
+	{
+		close(listeners[i].fd);
+	}
+}
+
 bool listen_socket(int sfd)
 {
 	if(listen(sfd, LISTEN_BACKLOG) != 0)
@@ -299,6 +307,9 @@ int main (int argc, char *argv[])
 	uint16_t ports[MAX_PORT];
 	size_t port_count = 0;
 	
+	struct listener listeners[MAX_PORT];
+	size_t listener_count = 0;
+	
 	if(!process_arguments(argc, argv, ports, &port_count))
 	{
 		print_usage(argv[0]);
@@ -324,31 +335,36 @@ int main (int argc, char *argv[])
 	}
 	
 	// Create, Bind and Listen on socket
-	struct listener listener = {
-		.port = ports[0],
-		.family = AF_INET,
-		.fd = -1
-	};
-	
-	listener.fd = create_socket();
-	if (listener.fd < 0)
+	for(size_t i = 0; i < port_count; i++)
 	{
-		return EXIT_FAILURE;
+		listeners[i].family = AF_INET;
+		listeners[i].port = ports[i];
+		listeners[i].fd = create_socket();
+		
+		if (listeners[i].fd < 0)
+		{
+			close_listeners(listeners, listener_count);
+			return EXIT_FAILURE;
+		}
+		
+		if(!bind_socket(listeners[i].fd, listeners[i].port))
+		{
+			close(listeners[i].fd);
+			close_listeners(listeners, listener_count);
+			return EXIT_FAILURE;
+		}
+		
+		if(!listen_socket(listeners[i].fd))
+		{
+			close(listeners[i].fd);
+			close_listeners(listeners, listener_count);
+			return EXIT_FAILURE;
+		}
+		
+		listener_count++;
+		
+		printf("Listening for noise on port: %hu\n", listeners[i].port);
 	}
-	
-	if(!bind_socket(listener.fd, listener.port))
-	{
-		close(listener.fd);
-		return EXIT_FAILURE;
-	}
-	
-	if(!listen_socket(listener.fd))
-	{
-		close(listener.fd);
-		return EXIT_FAILURE;
-	}
-	
-	printf("Listening for noise on port: %hu\n", listener.port);
 	
 	uint64_t connection_count = 0;
 	struct seen_ip records[MAX_SEEN_IPS];
@@ -357,7 +373,7 @@ int main (int argc, char *argv[])
 	// Main loop
 	while (running) {
 		struct sockaddr_in peer_addr;
-		int cfd = accept_connection(listener.fd,  &peer_addr);	
+		int cfd = accept_connection(listeners[0].fd,  &peer_addr);	
 		if(cfd < 0 && errno == EINTR && running == 0)
 		{
 			printf("\nShutdown signal caught, shutting down...\n");
@@ -365,7 +381,7 @@ int main (int argc, char *argv[])
 		}
 		else if(cfd < 0)
 		{
-			close(listener.fd);
+			close_listeners(listeners, listener_count);
 			return EXIT_FAILURE;
 		}
 		
@@ -388,7 +404,7 @@ int main (int argc, char *argv[])
 		
 		connection_count++;
 		event.connection_number = connection_count;
-		event.port = listener.port;
+		event.port = listeners[0].port;
 		
 		// Setup receive timeout
 		struct timeval timeout;
@@ -398,7 +414,7 @@ int main (int argc, char *argv[])
 		if(setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) != 0)
 		{
 			close(cfd);
-			close(listener.fd);
+			close_listeners(listeners, listener_count);
 			perror("setsockopt");
 			return EXIT_FAILURE;
 		} 
@@ -462,11 +478,11 @@ int main (int argc, char *argv[])
 		}
 		
 		close(cfd);
-		log_connection(listener.port, output_buffer, event.payload, event.payload_len);
+		log_connection(listeners[0].port, output_buffer, event.payload, event.payload_len);
 	}
 	
+	close_listeners(listeners, listener_count);
 	printf("Connection attempts: %" PRIu64 "\n", connection_count);
 	
-	close(listener.fd);
 	return EXIT_SUCCESS;
 }
