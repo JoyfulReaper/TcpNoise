@@ -596,6 +596,30 @@ int main (int argc, char *argv[])
 					close(cfd);
 					continue;
 				}
+				
+				char log_buffer[256];
+				int lx = snprintf(
+					log_buffer,
+					sizeof log_buffer,
+					"[%s] connection #%" PRIu64 "  TCP/%hu  %s  %s  seen=%" PRIu64,
+					event.timestamp,
+					event.connection_number,
+					event.port,
+					family_name,
+					remote_endpoint,
+					event.seen_count);
+				if(lx >= (int)sizeof log_buffer)
+				{
+					fprintf(stderr, "log_buffer is too small\n");
+					close(cfd);
+					continue;
+				}
+				else if(lx < 0)
+				{
+					fprintf(stderr, "Encoding error\n");
+					close(cfd);
+					continue;
+				}
 
 				// Print final results
 				printf("%s\n", output_buffer);
@@ -610,7 +634,7 @@ int main (int argc, char *argv[])
 				}
 				
 				close(cfd);
-				log_connection(listeners[i].port, output_buffer, event.payload, event.payload_len);
+				log_connection(listeners[i].port, log_buffer, event.payload, event.payload_len);
 				
 			}
 		}
