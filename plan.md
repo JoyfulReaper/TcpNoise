@@ -2,7 +2,7 @@
 
 `tcpnoise` is a small POSIX C program for observing unsolicited TCP connection noise on public ports.
 
-The project should stay understandable and portable between FreeBSD and Linux. The goal is not to turn it into a packet analyzer, IDS, or networking framework.
+The project should stay understandable and portable between FreeBSD and Linux. The goal is not to turn it into a packet analyzer, IDS, honeypot framework, or networking framework.
 
 ## Working style
 
@@ -26,6 +26,7 @@ Keep each slice small enough to understand and test independently.
 - Safely display a bounded payload preview.
 - Append events to per-port log files.
 - Gracefully stop on signals.
+- Optionally send a configured per-port banner after accepting a connection.
 - Optionally publish best-effort events to Mission Control.
 - Remain usable on FreeBSD and Linux.
 - Keep dependencies minimal.
@@ -38,6 +39,17 @@ Example eventual usage:
 
 The program should be able to watch all requested ports simultaneously.
 
+Optional banner files may be placed beside the program or in a later configurable directory:
+
+```text
+23_banner.txt
+80_banner.txt
+2222_banner.txt
+2323_banner.txt
+```
+
+If a banner file for a configured port does not exist, tcpnoise should simply accept and observe connections as normal.
+
 ---
 
 ## Non-goals
@@ -47,12 +59,15 @@ For now, tcpnoise will not:
 - capture raw SYN packets;
 - detect scans that never complete a TCP handshake;
 - implement a full Telnet, HTTP, SSH, or other application protocol server;
+- emulate real services beyond optionally sending a static configured banner;
 - attempt to exploit, retaliate against, or interact aggressively with scanners;
 - implement its own TLS stack;
 - implement log rotation;
 - become a multithreaded framework unless actual load proves that necessary.
 
 An accepted connection is the unit tcpnoise observes.
+
+Banner support is intentionally simple: send bounded static bytes associated with the listening port, then continue with the normal observation path.
 
 ---
 
@@ -68,12 +83,15 @@ create listener set
        |
        +--> port 23   IPv4 listener
        |              IPv6 listener
+       |              optional banner
        |
        +--> port 80   IPv4 listener
        |              IPv6 listener
+       |              optional banner
        |
        +--> port 2222 IPv4 listener
        |              IPv6 listener
+       |              optional banner
        |
        +--> ...
        |
@@ -82,6 +100,8 @@ create listener set
        |
        v
 accept ready connection
+       |
+       +--> optionally send port banner
        |
        v
 build connection_event
@@ -95,6 +115,8 @@ build connection_event
 IPv4 and IPv6 should use explicit listeners rather than relying on OS-dependent IPv4-mapped IPv6 behavior.
 
 For IPv6 listener sockets, use `IPV6_V6ONLY` so the IPv6 socket only handles IPv6 while the IPv4 socket handles IPv4. This makes behavior predictable across FreeBSD and Linux.
+
+Banner data should be loaded once during startup rather than opening and reading a banner file for every accepted connection.
 
 ---
 
@@ -203,6 +225,8 @@ port 80
   fd 6 IPv6
 ```
 
+Do not add banner ownership to the listener struct yet unless it naturally simplifies the implementation. Banner configuration can be associated with a port in a later slice.
+
 ### Slice 7 - Watch multiple listeners with `poll()`
 
 Replace the single blocking `accept()` loop with `poll()` over all listening sockets.
@@ -304,6 +328,7 @@ Connection handling should own:
 - connection event construction;
 - seen counter update;
 - output/logging;
+- optional banner send;
 - telemetry trigger.
 
 ### Slice 12 - Improve receive-state reporting
@@ -331,15 +356,100 @@ Do not add threads merely because they exist.
 
 ---
 
-## Phase 5 - Seen-IP tracking
+## Phase 5 - Optional per-port banners
 
-### Slice 14 - IPv6-capable seen table
+Banner support should remain optional and simple.
+
+The initial convention is:
+
+```text
+<port>_banner.txt
+```
+
+Examples:
+
+```text
+23_banner.txt
+80_banner.txt
+2222_banner.txt
+2323_banner.txt
+```
+
+A missing banner file is not an error.
+
+### Slice 14 - Discover and load banner files
+
+For each configured port, check once during startup whether a matching banner file exists.
+
+Requirements:
+
+- do not reopen the banner file for every connection;
+- store banner bytes and length in memory;
+- impose a reasonable maximum banner size;
+- treat banner contents as bytes, not necessarily a C string;
+- a missing file means no banner for that port;
+- a read error on an existing banner file should warn clearly but should not prevent unrelated ports from starting.
+
+Startup output may optionally indicate banner status:
+
+```text
+Listening:
+  tcp4 0.0.0.0:2222  banner=2222_banner.txt
+  tcp6 [::]:2222     banner=2222_banner.txt
+  tcp4 0.0.0.0:2323  banner=none
+```
+
+A configurable banner directory can be added later if useful.
+
+### Slice 15 - Send banner after accept
+
+If the accepted connection belongs to a port with configured banner data, attempt to send it immediately after `accept()`.
+
+Requirements:
+
+- handle partial writes correctly;
+- handle interrupted writes;
+- do not assume one `send()` transmits the entire banner;
+- avoid process termination from `SIGPIPE`;
+- a failed banner send must not kill tcpnoise;
+- after the banner attempt, continue with the normal receive/logging path.
+
+The initial behavior should be static and predictable:
+
+```text
+accept
+  -> optional banner send
+  -> wait briefly for payload
+  -> record event
+```
+
+Do not implement protocol conversations, prompts, login flows, or state machines.
+
+### Slice 16 - Record banner-send result
+
+Extend the event/logging model enough to preserve useful banner information, such as:
+
+- no banner configured;
+- banner sent;
+- partial send;
+- send failed;
+- number of banner bytes successfully sent.
+
+Keep terminal output compact.
+
+Mission Control can later include these fields when telemetry is added.
+
+---
+
+## Phase 6 - Seen-IP tracking
+
+### Slice 17 - IPv6-capable seen table
 
 Update seen-IP storage for IPv6 addresses.
 
 Initially the existing bounded array and linear search are acceptable because the project is small.
 
-### Slice 15 - Define behavior when the table fills
+### Slice 18 - Define behavior when the table fills
 
 The current fixed seen table eventually fills permanently.
 
@@ -355,9 +465,9 @@ If traffic later justifies it, replace the linear table with a small hash table.
 
 ---
 
-## Phase 6 - Logging
+## Phase 7 - Logging
 
-### Slice 16 - Keep per-port logs
+### Slice 19 - Keep per-port logs
 
 Retain the current useful behavior:
 
@@ -372,7 +482,9 @@ Each accepted event is written to the log associated with the listening port.
 
 Continue escaping payload bytes before writing them.
 
-### Slice 17 - Make log path configurable
+Include banner-send state when useful without making logs noisy.
+
+### Slice 20 - Make log path configurable
 
 Optionally support a log directory, such as:
 
@@ -384,15 +496,17 @@ Do not implement rotation in tcpnoise.
 
 Document an example `logrotate` configuration instead.
 
+A later configuration option may also allow banner files to live in a dedicated directory.
+
 ---
 
-## Phase 7 - Mission Control telemetry
+## Phase 8 - Mission Control telemetry
 
 Mission Control integration is optional and best effort.
 
 A Mission Control failure must never stop tcpnoise from accepting connections.
 
-### Slice 18 - Define telemetry configuration
+### Slice 21 - Define telemetry configuration
 
 Read configuration from environment variables rather than source code.
 
@@ -406,7 +520,7 @@ TCPNOISE_MC_API_KEY
 
 The API key must never be committed to Git.
 
-### Slice 19 - Add HTTP dependency deliberately
+### Slice 22 - Add HTTP dependency deliberately
 
 Use `libcurl` for HTTP/HTTPS.
 
@@ -416,7 +530,7 @@ Update the Makefile using the platform's `pkg-config` / curl linker flags in a w
 
 Telemetry support should ideally be compile-time optional if libcurl is not desired.
 
-### Slice 20 - Define the event
+### Slice 23 - Define the event
 
 Suggested Mission Control event type:
 
@@ -438,6 +552,9 @@ Suggested payload:
   "seenCount": 37,
   "bytesReceived": 0,
   "receiveResult": "timeout",
+  "bannerConfigured": true,
+  "bannerBytesSent": 18,
+  "bannerResult": "sent",
   "payloadPreview": null
 }
 ```
@@ -450,7 +567,9 @@ For IPv6:
 
 Payload preview must remain bounded and safely encoded.
 
-### Slice 21 - Build valid Mission Control envelopes
+Banner contents themselves should not automatically be copied into telemetry. Metadata about whether a banner was configured and sent is sufficient.
+
+### Slice 24 - Build valid Mission Control envelopes
 
 Publish to:
 
@@ -475,7 +594,7 @@ The request envelope needs:
 
 Use a small JSON library or carefully evaluate whether constructing this limited JSON shape manually is reasonable. Do not concatenate unescaped hostile payload text into JSON.
 
-### Slice 22 - Best-effort telemetry delivery
+### Slice 25 - Best-effort telemetry delivery
 
 Mission Control should have a short timeout.
 
@@ -483,7 +602,7 @@ Policy:
 
 ```text
 publish succeeds -> continue
-publish fails    -> optionally warn, continue
+publish fails     -> optionally warn, continue
 publish times out -> continue
 ```
 
@@ -493,7 +612,7 @@ If Mission Control latency becomes noticeable, add a tiny bounded queue or anoth
 
 ---
 
-## Phase 8 - Optional scanner classification
+## Phase 9 - Optional scanner classification
 
 Only after the core program is stable.
 
@@ -517,9 +636,11 @@ Possible output:
 click! [connection #412] [port: 80] [remote: ...] [seen: 1] [probe: http]
 ```
 
+Do not confuse tcpnoise's configured outbound banner with an inbound scanner banner or probe.
+
 ---
 
-## Phase 9 - Rolling statistics / histogram
+## Phase 10 - Rolling statistics / histogram
 
 Optional terminal statistics:
 
@@ -540,6 +661,15 @@ ssh       34
 other     63
 ```
 
+Possible banner statistics later:
+
+```text
+Banners:
+sent      384
+failed      7
+none      1030
+```
+
 Keep this in memory.
 
 Do not introduce a database merely to count internet garbage.
@@ -557,6 +687,7 @@ A reasonable eventual layout is:
 ├── Makefile
 ├── plan.md
 ├── include/
+│   ├── banner.h
 │   ├── connection.h
 │   ├── listener.h
 │   ├── logging.h
@@ -564,6 +695,7 @@ A reasonable eventual layout is:
 │   └── telemetry.h
 └── src/
     ├── main.c
+    ├── banner.c
     ├── connection.c
     ├── listener.c
     ├── logging.c
@@ -574,6 +706,8 @@ A reasonable eventual layout is:
 This is a target, not a requirement.
 
 Do not create a `.c`/`.h` pair for every five-line function just to make the tree look architectural.
+
+Banner code only deserves its own module once loading/sending/configuration is large enough to justify one.
 
 ---
 
@@ -603,11 +737,35 @@ IPv6 firewall rules must be verified separately where applicable.
 
 Use the operating system's rotation facilities for long-running public deployments.
 
+## Banner files
+
+Treat banner files as configuration.
+
+Do not read them on every connection.
+
+Keep banners bounded so a mistaken or huge file cannot cause excessive memory use or unexpectedly large writes.
+
+Banner data may be arbitrary bytes, but the first implementation can focus on ordinary text files.
+
+Avoid pretending to be a real service in ways that require protocol state. A static string such as:
+
+```text
+SSH-2.0-OpenSSH_8.9
+```
+
+or:
+
+```text
+Welcome to totally-real-telnet
+```
+
+is within scope; implementing an SSH or Telnet server is not.
+
 ## Mission Control secrets
 
 Store API keys only in environment/service configuration or another secret mechanism.
 
-Never place them in `plan.md`, source files, logs, or Git history.
+Never place them in `plan.md`, source files, logs, banner files, or Git history.
 
 ---
 
@@ -634,6 +792,12 @@ As development proceeds, keep checking:
 - [ ] Timestamp failures are handled.
 - [ ] Seen-IP table exhaustion is quiet and predictable.
 - [ ] Log failure does not stop connection handling.
+- [ ] Missing banner files are handled silently or with nonfatal startup information.
+- [ ] Banner files are loaded once rather than once per connection.
+- [ ] Banner length is bounded.
+- [ ] Partial banner writes are handled.
+- [ ] `SIGPIPE` cannot unexpectedly terminate tcpnoise.
+- [ ] Banner send failure does not stop connection handling.
 - [ ] Mission Control failure does not stop connection handling.
 - [ ] Mission Control API key is never logged.
 - [ ] Telemetry payload is valid JSON even for hostile binary input.
@@ -659,6 +823,7 @@ and:
 - reports remote IPv4 or IPv6 address and source port;
 - tracks per-IP seen counts;
 - safely previews payload bytes;
+- optionally sends a bounded configured per-port banner;
 - writes per-port log files;
 - shuts down cleanly;
 - optionally emits bounded best-effort Mission Control events;
