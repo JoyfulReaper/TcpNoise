@@ -431,6 +431,34 @@ bool resolve_remote(
 	}
 }
 
+bool set_receive_timeout(int cfd)
+{
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 250000;
+	
+	if(setsockopt(
+		cfd,
+		SOL_SOCKET,
+		SO_RCVTIMEO,
+		&timeout,
+		sizeof timeout) != 0)
+	{
+		perror("setsockopt SO_RCVTIMEO");
+		return false;
+	}
+	
+	return true;
+}
+
+ssize_t receive_payload(
+	int cfd,
+	char *buffer,
+	size_t buffer_size)
+	{
+		return recv(cfd, buffer, buffer_size, 0);
+	}
+
 int main (int argc, char *argv[])
 {
 	// Parse port
@@ -563,20 +591,15 @@ int main (int argc, char *argv[])
 				event.port = listeners[i].port;
 				
 				// Setup receive timeout
-				struct timeval timeout;
-				timeout.tv_sec = 0;
-				timeout.tv_usec = 250000;
-				
-				if(setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) != 0)
+				if(!set_receive_timeout(cfd))
 				{
 					close(cfd);
 					close_listeners(listeners, listener_count);
-					perror("setsockopt");
 					return EXIT_FAILURE;
-				} 
+				}
 				
 				// Read payload
-				event.payload_len = recv(cfd, event.payload, sizeof event.payload, 0);
+				event.payload_len = receive_payload(cfd, event.payload, sizeof event.payload);
 				if(event.payload_len < 0 && errno == EINTR && running == 0)
 				{
 					close(cfd);
