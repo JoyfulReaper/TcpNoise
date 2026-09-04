@@ -336,6 +336,28 @@ bool log_connection (
 	return true;
 }
 
+void capture_timestamp(char *buffer, size_t buffer_size)
+{
+	snprintf(buffer, buffer_size, "(unknown time)");
+	
+	time_t now = time(NULL);
+	if(now == (time_t)-1)
+	{
+		return;
+	}
+	
+	struct tm *t_info = localtime(&now);
+	if(t_info == NULL)
+	{
+		return;
+	}
+	
+	if(strftime(buffer, buffer_size, "%Y-%m-%d %H:%M:%S", t_info) == 0)
+	{
+		snprintf(buffer, buffer_size, "(unknown time)");
+	}
+}
+
 int main (int argc, char *argv[])
 {
 	// Parse port
@@ -461,19 +483,7 @@ int main (int argc, char *argv[])
 				struct connection_event event;
 				
 				// Capture timestamp immediately upon accepting
-				snprintf(event.timestamp, sizeof event.timestamp, "(unknown time)");
-				time_t now = time(NULL);
-				if(now != (time_t) -1)
-				{
-					struct tm *t_info = localtime(&now);
-					if(t_info != NULL)
-					{
-						if(strftime(event.timestamp, sizeof event.timestamp, "%Y-%m-%d %H:%M:%S", t_info) == 0)
-						{
-							snprintf(event.timestamp, sizeof event.timestamp, "(unknown time)");
-						}
-					}
-				}
+				capture_timestamp(event.timestamp, sizeof event.timestamp);
 				
 				size_t port_index = listeners[i].port_index;
 				connection_counts[port_index]++;
