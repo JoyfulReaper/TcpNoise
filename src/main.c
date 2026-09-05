@@ -303,7 +303,8 @@ bool log_connection (
 	uint16_t port, 
 	const char *message,
 	const char *payload,
-	ssize_t length)
+	ssize_t length,
+	enum receive_status status)
 {
 	#ifndef ENABLE_LOGGING
 		return true;
@@ -327,14 +328,26 @@ bool log_connection (
 		return false;
 	}
 	
-	if(length > 0)
+	if(status == RECEIVE_DATA)
 	{
 		fprintf(file, "- Payload: ");
 		print_payload(file, payload, length);
 	}
+	else if(status == RECEIVE_CLOSED)
+	{
+		fprintf(file, "- Payload: <peer closed>\n");
+	}
+	else if(status == RECEIVE_TIMEOUT)
+	{
+		fprintf(file, "- Payload: <timeout>\n");
+	}
+	else if(status == RECEIVE_INTERRUPTED)
+	{
+		fprintf(file, "- Payload: <interrupted>\n");
+	}
 	else
 	{
-		fprintf(file, "- Payload: <none>\n");
+		fprintf(file, "- Payload: <receive error>\n");
 	}
 	
 	if(fclose(file) != 0)
@@ -722,19 +735,30 @@ int main (int argc, char *argv[])
 
 				// Print final results
 				printf("%s\n", output_buffer);
-				if(event.payload_len == 0 || event.payload_len < 0)
-				{
-					printf("           payload: <none>\n");
-				}
-				else if(event.payload_len > 0)
+				if(payload_result == RECEIVE_DATA)
 				{
 					printf("           payload: ");
 					print_payload(stdout, event.payload, event.payload_len);
 				}
+				else if(payload_result == RECEIVE_CLOSED)
+				{
+					printf("           payload: <peer closed>\n");
+				}
+				else if(payload_result == RECEIVE_TIMEOUT)
+				{
+					printf("           payload: <timeout>\n");
+				}
+				else if(payload_result == RECEIVE_INTERRUPTED)
+				{
+					printf("           payload: <interrupted>\n");
+				}
+				else
+				{
+					printf("           payload: <receive error>\n");
+				}
 				
 				close(cfd);
-				log_connection(listeners[i].port, log_buffer, event.payload, event.payload_len);
-				
+				log_connection(listeners[i].port, log_buffer, event.payload, event.payload_len, payload_result);
 			}
 		}
 	}
