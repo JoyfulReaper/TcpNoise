@@ -318,7 +318,9 @@ bool log_connection (
 	const char *message,
 	const char *payload,
 	ssize_t length,
-	enum receive_status status)
+	enum receive_status status,
+	const char *banner,
+	bool banner_sent)
 {
 	#ifndef ENABLE_LOGGING
 		return true;
@@ -340,6 +342,19 @@ bool log_connection (
 			
 		fclose(file);
 		return false;
+	}
+	
+	if(banner == NULL)
+	{
+		fprintf(file, "- banner: <none>\n");
+	}
+	else if(banner_sent)
+	{
+		fprintf(file, "- banner: %s\n", banner);
+	}
+	else
+	{
+		fprintf(file, "- banner: <send failed> %s\n", banner);
 	}
 	
 	if(status == RECEIVE_DATA)
@@ -748,7 +763,9 @@ enum connection_result handle_connection(
 		log_buffer,
 		event.payload,
 		event.payload_len,
-		payload_result);
+		payload_result,
+		banner,
+		banner_sent);
 
 	return CONNECTION_OK;
 }
