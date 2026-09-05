@@ -1,0 +1,115 @@
+HELLO FROM THE VOID
+tcpnoise says hello
+Nothing useful is running here
+Nice scanner you have there
+You found a socket
+This port is mostly decorative
+Please insert one (1) packet
+Connection accepted. Regret pending.
+Welcome, automated internet stranger
+I have been expecting your bot
+The packets are coming from inside the house
+This is not the service you are looking for
+Absolutely normal network appliance
+Enterprise-grade mystery service
+Legacy system. Please lower expectations.
+Service unavailable due to vibes
+Powered by questionable decisions
+Please hold. Your packet is important to us.
+Congratulations, you found a TCP port
+No login. Only noise.
+Your connection has been noted dramatically
+This server knows what you did last packet
+Thank you for contributing to the dataset
+Beep.
+Boop.
+FART
+BURP
+Nice try, robot
+Hello, Shodan
+Hello, Censys
+Hello, random botnet
+Scanning builds character
+Unauthorized curiosity detected
+RFC 420: Blaze It
+Protocol negotiation failed successfully
+ERROR: Too much internet
+ERROR: User not found. Bot detected.
+WARNING: Socket may contain traces of BSD
+FreeBSD sends its regards
+tcpnoise/1.0 totally-real-service
+Mystery daemon ready
+This port accepts connections and bad decisions
+You rang?
+Who goes there?
+Connection received. Nothing further.
+Please enjoy this complimentary banner
+Your packet has been forwarded to /dev/null emotionally
+The server is thinking about it
+Service status: probably fine
+There is no treasure here
+You have reached the end of the internet
+SSH-2.0-OpenSSH_9.7
+SSH-2.0-OpenSSH_9.6p1
+SSH-2.0-dropbear_2024.85
+220 mail.example.net ESMTP ready
+220 localhost ESMTP service ready
+220 FTP Server ready
+220 Welcome to FTP service
+220 Service ready for new user
++OK POP3 server ready
+* OK IMAP4rev1 Service Ready
+HTTP/1.1 400 Bad Request
+HTTP/1.1 403 Forbidden
+HTTP/1.1 404 Not Found
+HTTP/1.1 503 Service Unavailable
+Server: nginx
+Server: Apache
+Server: lighttpd
+Server: Caddy
+Connection established
+Service ready
+Ready
+OK
+Welcome
+Login:
+Username:
+Password:
+login:
+user:
+220 localhost FTP server ready
+220 ProFTPD Server ready
+220 Pure-FTPd
+RFB 003.008
+RFB 003.003
++PONG
+ERROR
+ERR unknown command
+-ERR invalid command
+500 Unknown command
+500 Syntax error, command unrecognized
+502 Command not implemented
+421 Service not available
+200 Ready
+201 Service ready
+HELLO
+NOTICE AUTH required
+AUTH required
+Access denied
+Authentication required
+Remote management service ready
+Management console ready
+Network service initialized
+Daemon ready
+TCP service ready
+Protocol version 1.0
+Protocol error
+Invalid request
+Bad request
+Unsupported protocol
+Unknown request
+SSH-2.0-tcpnoise
+220 tcpnoise ESMTP ready
+220 tcpnoise FTP server ready
+Server: tcpnoise
+tcpnoise service ready
