@@ -7,7 +7,7 @@ SQLITE_LIBS != pkg-config --libs sqlite3
 CFLAGS += ${SQLITE_CFLAGS}
 LDLIBS += ${SQLITE_LIBS}
 
-SRC = src/main.c src/banner.c src/seen.c src/logging.c src/network.c src/database.c
+SRC = src/main.c src/banner.c src/logging.c src/network.c src/database.c
 OBJ = ${SRC:.c=.o}
 
 tcpnoise: ${OBJ}

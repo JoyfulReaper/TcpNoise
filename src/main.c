@@ -1,5 +1,4 @@
 #include "banner.h"
-#include "seen.h"
 #include "logging.h"
 #include "network.h"
 #include "database.h"
@@ -150,11 +149,10 @@ void capture_timestamp(char *buffer, size_t buffer_size)
 enum connection_result handle_connection(
 	int cfd,
 	const struct listener *listener,
+	sqlite3 *db,
 	uint64_t connection_number,
 	const struct sockaddr_storage *peer_addr,
-	socklen_t peer_addr_size,
-	struct seen_ip records[],
-	size_t *record_count)
+	socklen_t peer_addr_size)
 {
 	struct connection_event event;
 	
@@ -211,14 +209,13 @@ enum connection_result handle_connection(
 		sizeof event.ip,
 		&event.remote_port);
 		
-	enum seen_result seen_result = increment_seen_ip(records, record_count, event.ip, &event.seen_count);
-	if(seen_result == SEEN_ERROR)
+	if(!database_record_seen_ip(
+		db,
+		event.ip,
+		event.timestamp,
+		&event.seen_count))
 	{
-		fprintf(stderr, "Failed to update seen-IP table\n");
-		event.seen_count = 0;
-	} else if (seen_result == SEEN_FULL)
-	{
-		fprintf(stderr, "Seen-IP table is full.\n");
+		fprintf(stderr, "Failed to update persistent seen-IP table\n");
 		event.seen_count = 0;
 	}
 
@@ -497,9 +494,6 @@ int main (int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	
-	struct seen_ip records[MAX_SEEN_IPS];
-	size_t record_count = 0;
-	
 	// Main loop
 	while (running) {
 		int num_selected = poll(pollfds, listener_count, -1);
@@ -547,11 +541,10 @@ int main (int argc, char *argv[])
 					handle_connection(
 						cfd,
 						&listeners[i],
+						db,
 						connection_counts[port_index],
 						&peer_addr,
-						peer_addr_size,
-						records,
-						&record_count);
+						peer_addr_size);
 
 				if(result == CONNECTION_SHUTDOWN)
 				{
