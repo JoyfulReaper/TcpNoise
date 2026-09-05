@@ -18,21 +18,15 @@
 #include <arpa/inet.h>
 
 #include "banner.h"
+#include "seen.h"
 
 #define ENABLE_LOGGING
-#define MAX_SEEN_IPS 1000
 #define MAX_PAYLOAD_LEN 256
 #define LISTEN_BACKLOG 64
 #define MAX_PORT 10
 #define MAX_LISTENERS (MAX_PORT * 2)
 
 volatile sig_atomic_t running = 1;
-
-struct seen_ip
-{
-	char ip[INET6_ADDRSTRLEN];
-	unsigned int count;
-};
 
 struct listener
 {
@@ -71,46 +65,6 @@ enum connection_result
 	CONNECTION_SHUTDOWN,
 	CONNECTION_FATAL
 };
-
-int find_seen_ip(
-	struct seen_ip records[],
-	size_t record_count,
-	const char *ip)
-{
-	for(size_t i = 0; i < record_count; i++)
-	{
-		if(strcmp(ip, records[i].ip) == 0)
-			return (int)i;
-	}
-	
-	return -1;
-}
-
-uint64_t increment_seen_ip(
-	struct seen_ip records[],
-	size_t *record_count,
-	const char *ip)
-{
-	int index = find_seen_ip(records, *record_count, ip);
-	if(index < 0) // We haven't see this IP address before
-	{
-		if(*record_count >= MAX_SEEN_IPS)
-		{
-			fprintf(stderr, "Seen IP buffer is full.\n");
-			return 0;
-		}
-		
-		records[*record_count].count = 1;
-		snprintf(records[*record_count].ip, sizeof records[*record_count].ip, "%s", ip);
-		
-		(*record_count)++;
-		
-		return 1;
-	}
-		
-	records[index].count++;
-	return records[index].count;
-}
 
 void print_usage(char *program)
 {

@@ -1,7 +1,7 @@
 CC = cc
 CFLAGS = -Wall -Wextra -Wpedantic -g -Iinclude
 
-SRC = src/main.c src/banner.c
+SRC = src/main.c src/banner.c src/seen.c
 OBJ = $(SRC:.c=.o)
 
 tcpnoise: $(OBJ)
