@@ -61,6 +61,13 @@ enum receive_status
 	RECEIVE_ERROR
 };
 
+enum connection_result
+{
+	CONNECTION_OK,
+	CONNECTION_SHUTDOWN,
+	CONNECTION_FATAL
+};
+
 int find_seen_ip(
 	struct seen_ip records[],
 	size_t record_count,
@@ -478,23 +485,185 @@ enum receive_status receive_payload(
 	char *buffer,
 	size_t buffer_size,
 	ssize_t *bytes_received)
+{
+	*bytes_received = recv(cfd, buffer, buffer_size, 0);
+	
+	if(*bytes_received > 0)
+		return RECEIVE_DATA;
+	
+	if(*bytes_received == 0)
+		return RECEIVE_CLOSED;
+		
+	if(errno == EAGAIN || errno == EWOULDBLOCK)
+		return RECEIVE_TIMEOUT;
+		
+	if(errno == EINTR)
+		return RECEIVE_INTERRUPTED;
+	
+	return RECEIVE_ERROR;
+}
+
+enum connection_result handle_connection(
+	int cfd,
+	const struct listener *listener,
+	uint64_t connection_number,
+	const struct sockaddr_storage *peer_addr,
+	socklen_t peer_addr_size,
+	struct seen_ip records[],
+	size_t *record_count)
+{
+	struct connection_event event;
+	
+	capture_timestamp(event.timestamp, sizeof event.timestamp);
+	
+	event.connection_number = connection_number;
+	event.port = listener->port;
+
+	if(!set_receive_timeout(cfd))
 	{
-		*bytes_received = recv(cfd, buffer, buffer_size, 0);
-		
-		if(*bytes_received > 0)
-			return RECEIVE_DATA;
-		
-		if(*bytes_received == 0)
-			return RECEIVE_CLOSED;
-			
-		if(errno == EAGAIN || errno == EWOULDBLOCK)
-			return RECEIVE_TIMEOUT;
-			
-		if(errno == EINTR)
-			return RECEIVE_INTERRUPTED;
-		
-		return RECEIVE_ERROR;
+		close(cfd);
+		return CONNECTION_FATAL;
 	}
+	
+	enum receive_status payload_result =
+	receive_payload(
+		cfd,
+		event.payload,
+		sizeof event.payload,
+		&event.payload_len);
+
+	if(payload_result == RECEIVE_INTERRUPTED)
+	{
+		if(!running)
+		{
+			close(cfd);
+			return CONNECTION_SHUTDOWN;
+		}
+
+		perror("recv");
+	}
+	else if(payload_result == RECEIVE_ERROR)
+	{
+		perror("recv");
+	}
+
+	resolve_remote(
+		peer_addr,
+		peer_addr_size,
+		event.ip,
+		sizeof event.ip,
+		&event.remote_port);
+		
+	event.seen_count = increment_seen_ip(records, record_count, event.ip);
+	if(event.seen_count == 0)
+	{
+		fprintf(stderr, "Failed to increment seen count\n");
+	}
+
+	char remote_endpoint[INET6_ADDRSTRLEN + 8];
+	format_remote_endpoint(
+		remote_endpoint,
+		sizeof remote_endpoint,
+		peer_addr->ss_family,
+		event.ip,
+		event.remote_port);
+		
+	const char *family_name =
+		listener->family == AF_INET6 ? "IPv6" : "IPv4";
+		
+	const char *console_time = event.timestamp;
+	if(strlen(event.timestamp) >= 19)
+	{
+		console_time = event.timestamp + 11;
+	}
+
+	char output_buffer[256];
+
+	int cx = snprintf(
+		output_buffer,
+		sizeof output_buffer,
+		"[%s] connection #%" PRIu64 "  TCP/%hu  %s  %s  seen=%" PRIu64,
+		console_time,
+		event.connection_number,
+		event.port,
+		family_name,
+		remote_endpoint,
+		event.seen_count);
+
+	if(cx >= (int)sizeof output_buffer)
+	{
+		fprintf(stderr, "output_buffer is too small\n");
+		close(cfd);
+		return CONNECTION_OK;
+	}
+	else if(cx < 0)
+	{
+		fprintf(stderr, "Encoding error\n");
+		close(cfd);
+		return CONNECTION_OK;
+	}
+	
+	char log_buffer[256];
+
+	int lx = snprintf(
+		log_buffer,
+		sizeof log_buffer,
+		"[%s] connection #%" PRIu64 "  TCP/%hu  %s  %s  seen=%" PRIu64,
+		event.timestamp,
+		event.connection_number,
+		event.port,
+		family_name,
+		remote_endpoint,
+		event.seen_count);
+
+	if(lx >= (int)sizeof log_buffer)
+	{
+		fprintf(stderr, "log_buffer is too small\n");
+		close(cfd);
+		return CONNECTION_OK;
+	}
+	else if(lx < 0)
+	{
+		fprintf(stderr, "Encoding error\n");
+		close(cfd);
+		return CONNECTION_OK;
+	}
+
+	printf("%s\n", output_buffer);
+
+	if(payload_result == RECEIVE_DATA)
+	{
+		printf("           payload: ");
+		print_payload(stdout, event.payload, event.payload_len);
+	}
+	else if(payload_result == RECEIVE_CLOSED)
+	{
+		printf("           payload: <peer closed>\n");
+	}
+	else if(payload_result == RECEIVE_TIMEOUT)
+	{
+		printf("           payload: <timeout>\n");
+	}
+	else if(payload_result == RECEIVE_INTERRUPTED)
+	{
+		printf("           payload: <interrupted>\n");
+	}
+	else
+	{
+		printf("           payload: <receive error>\n");
+	}
+
+	close(cfd);
+
+	log_connection(
+		listener->port,
+		log_buffer,
+		event.payload,
+		event.payload_len,
+		payload_result);
+
+	return CONNECTION_OK;
+}
 
 int main (int argc, char *argv[])
 {
@@ -616,149 +785,28 @@ int main (int argc, char *argv[])
 					close_listeners(listeners, listener_count);
 					return EXIT_FAILURE;
 				}
-				
-				struct connection_event event;
-				
-				// Capture timestamp immediately upon accepting
-				capture_timestamp(event.timestamp, sizeof event.timestamp);
-				
 				size_t port_index = listeners[i].port_index;
 				connection_counts[port_index]++;
-				event.connection_number = connection_counts[port_index];
-				event.port = listeners[i].port;
-				
-				// Setup receive timeout
-				if(!set_receive_timeout(cfd))
+
+				enum connection_result result =
+					handle_connection(
+						cfd,
+						&listeners[i],
+						connection_counts[port_index],
+						&peer_addr,
+						peer_addr_size,
+						records,
+						&record_count);
+
+				if(result == CONNECTION_SHUTDOWN)
 				{
-					close(cfd);
+					break;
+				}
+				else if(result == CONNECTION_FATAL)
+				{
 					close_listeners(listeners, listener_count);
 					return EXIT_FAILURE;
 				}
-				
-				// Read payload
-				enum receive_status payload_result = 
-					receive_payload(cfd, event.payload, sizeof event.payload, &event.payload_len);
-				if(payload_result == RECEIVE_INTERRUPTED)
-				{
-					if(!running)
-					{
-						close(cfd);
-						break;
-					}
-					
-					perror("recv");
-				}
-				
-				if(payload_result == RECEIVE_ERROR)
-				{
-					perror("recv");
-				}
-				
-				// Get remote information
-				resolve_remote(
-					&peer_addr,
-					peer_addr_size,
-					event.ip,
-					sizeof event.ip,
-					&event.remote_port);
-								
-				// Have we seen this IP before during this run?
-				event.seen_count = increment_seen_ip(records, &record_count, event.ip);
-				if( event.seen_count == 0)
-				{
-					fprintf(stderr, "Failed to increment seen count\n");
-				}
-				
-				char remote_endpoint[INET6_ADDRSTRLEN + 8];
-				format_remote_endpoint(
-					remote_endpoint,
-					sizeof remote_endpoint,
-					peer_addr.ss_family,
-					event.ip,
-					event.remote_port);
-				
-				const char *family_name =
-					listeners[i].family == AF_INET6 ? "IPv6" : "IPv4";
-				const char *console_time = event.timestamp;
-				if(strlen(event.timestamp) >= 19)
-				{
-					console_time = event.timestamp + 11;
-				}
-				char output_buffer[256];
-				
-				int cx = snprintf(
-					output_buffer,
-					sizeof output_buffer,
-					"[%s] connection #%" PRIu64 "  TCP/%hu  %s  %s  seen=%" PRIu64,
-					console_time,
-					event.connection_number,
-					event.port,
-					family_name,
-					remote_endpoint,
-					event.seen_count);
-				if(cx >= (int)sizeof output_buffer)
-				{
-					fprintf(stderr, "output_buffer is too small\n");
-					close(cfd);
-					continue;
-				}
-				else if(cx < 0)
-				{
-					fprintf(stderr, "Encoding error\n");
-					close(cfd);
-					continue;
-				}
-				
-				char log_buffer[256];
-				int lx = snprintf(
-					log_buffer,
-					sizeof log_buffer,
-					"[%s] connection #%" PRIu64 "  TCP/%hu  %s  %s  seen=%" PRIu64,
-					event.timestamp,
-					event.connection_number,
-					event.port,
-					family_name,
-					remote_endpoint,
-					event.seen_count);
-				if(lx >= (int)sizeof log_buffer)
-				{
-					fprintf(stderr, "log_buffer is too small\n");
-					close(cfd);
-					continue;
-				}
-				else if(lx < 0)
-				{
-					fprintf(stderr, "Encoding error\n");
-					close(cfd);
-					continue;
-				}
-
-				// Print final results
-				printf("%s\n", output_buffer);
-				if(payload_result == RECEIVE_DATA)
-				{
-					printf("           payload: ");
-					print_payload(stdout, event.payload, event.payload_len);
-				}
-				else if(payload_result == RECEIVE_CLOSED)
-				{
-					printf("           payload: <peer closed>\n");
-				}
-				else if(payload_result == RECEIVE_TIMEOUT)
-				{
-					printf("           payload: <timeout>\n");
-				}
-				else if(payload_result == RECEIVE_INTERRUPTED)
-				{
-					printf("           payload: <interrupted>\n");
-				}
-				else
-				{
-					printf("           payload: <receive error>\n");
-				}
-				
-				close(cfd);
-				log_connection(listeners[i].port, log_buffer, event.payload, event.payload_len, payload_result);
 			}
 		}
 	}
