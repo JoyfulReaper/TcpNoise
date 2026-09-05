@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
+#include <netdb.h>
+#include <stdlib.h>
 
 #include <sys/time.h>
 #include <sys/socket.h>
@@ -150,4 +153,77 @@ int accept_connection(int sfd, struct sockaddr_storage *peer_addr, socklen_t *pe
 	}
 	
 	return cfd;
+}
+
+void format_remote_endpoint(
+	char *buffer,
+	size_t buffer_size,
+	int family,
+	const char *ip,
+	uint16_t port)
+{
+	if(family == AF_INET6)
+	{
+		snprintf(
+			buffer,
+			buffer_size,
+			"[%s]:%" PRIu16,
+			ip,
+			port);
+	}
+	else
+	{
+		snprintf(
+			buffer,
+			buffer_size,
+			"%s:%" PRIu16,
+			ip,
+			port);
+	}
+}
+
+bool resolve_remote(
+	const struct sockaddr_storage *peer_addr,
+	socklen_t peer_addr_size,
+	char *ip,
+	size_t ip_size,
+	uint16_t *remote_port)
+{
+	char service[NI_MAXSERV];
+	
+	int res = getnameinfo(
+		(const struct sockaddr *)peer_addr,
+		peer_addr_size,
+		ip,
+		ip_size,
+		service,
+		sizeof service,
+		NI_NUMERICHOST | NI_NUMERICSERV);
+		
+	if(res != 0)
+	{
+		fprintf(stderr, "getnameinfo: %s\n", gai_strerror(res));
+		snprintf(ip, ip_size, "%s", "(unknown)");
+		*remote_port = 0;
+		return false;
+	} else {		
+		char *end;
+		errno = 0;
+		
+		long parsed_port = strtol(service, &end, 10);
+		
+		if(errno == ERANGE ||
+		   end == service ||
+		   *end != '\0' ||
+		   parsed_port < 1 ||
+		   parsed_port > 65535)
+		{
+			fprintf(stderr, "Failed to parse remote port: %s\n", service);
+			*remote_port = 0;
+			return false;
+		}
+
+		*remote_port = (uint16_t)parsed_port;
+		return true;
+	}
 }

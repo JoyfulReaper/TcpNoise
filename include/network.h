@@ -38,4 +38,18 @@ enum receive_status receive_payload(
     size_t buffer_size,
     ssize_t *bytes_received);
 
+bool resolve_remote(
+    const struct sockaddr_storage *peer_addr,
+    socklen_t peer_addr_size,
+    char *ip,
+    size_t ip_size,
+    uint16_t *remote_port);
+
+void format_remote_endpoint(
+    char *buffer,
+    size_t buffer_size,
+    int family,
+    const char *ip,
+    uint16_t port);
+
 #endif
