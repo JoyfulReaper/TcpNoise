@@ -369,45 +369,6 @@ int main (int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	
-	// DEBUG CODE
-	/*
-	sqlite3 *db = NULL;
-
-	if(!database_open("tcpnoise.db", &db))
-	{
-		fprintf(stderr, "Failed to open tcpnoise database.\n");
-		return EXIT_FAILURE;
-	}
-	
-	if(!database_initialize(db))
-	{
-		database_close(db);
-		return EXIT_FAILURE;
-	}
-	
-	uint64_t seen_count = 0;
-
-	if(!database_record_seen_ip(
-		db,
-		"203.0.113.10",
-		"2026-09-05 17:10:00",
-		&seen_count))
-	{
-		fprintf(stderr, "Failed to record test seen IP.\n");
-		database_close(db);
-		return EXIT_FAILURE;
-	}
-
-	if(!database_close(db))
-	{
-		fprintf(stderr, "Failed to close tcpnoise database.\n");
-		return EXIT_FAILURE;
-	}
-
-	printf("Test seen count: %" PRIu64 "\n", seen_count);
-	*/
-	// END DEBUG CODE
-	
 	// Register signal handler
 	struct sigaction action;
 	memset(&action, 0, sizeof action);
@@ -513,6 +474,29 @@ int main (int argc, char *argv[])
 		}
 	}
 	
+	// Open database
+	sqlite3 *db = NULL;
+	if(!database_open("tcpnoise.db", &db))
+	{
+		fprintf(stderr, "Failed to open tcpnoise database.\n");
+		
+		close_log_files(log_files, port_count);
+		free_banner_pools(banner_pools, port_count);
+		close_listeners(listeners, listener_count);
+		
+		return EXIT_FAILURE;
+	}
+	
+	if(!database_initialize(db))
+	{
+		database_close(db);
+		close_log_files(log_files, port_count);
+		free_banner_pools(banner_pools, port_count);
+		close_listeners(listeners, listener_count);
+		
+		return EXIT_FAILURE;
+	}
+	
 	struct seen_ip records[MAX_SEEN_IPS];
 	size_t record_count = 0;
 	
@@ -527,6 +511,7 @@ int main (int argc, char *argv[])
 		if (num_selected == -1)
 		{
 			perror("poll");
+			database_close(db);
 			close_log_files(log_files, port_count);
 			free_banner_pools(banner_pools, port_count);
 			close_listeners(listeners, listener_count);
@@ -549,6 +534,7 @@ int main (int argc, char *argv[])
 				}
 				else if(cfd < 0)
 				{
+					database_close(db);
 					close_log_files(log_files, port_count);
 					free_banner_pools(banner_pools, port_count);
 					close_listeners(listeners, listener_count);
@@ -573,6 +559,7 @@ int main (int argc, char *argv[])
 				}
 				else if(result == CONNECTION_FATAL)
 				{
+					database_close(db);
 					close_log_files(log_files, port_count);
 					free_banner_pools(banner_pools, port_count);
 					close_listeners(listeners, listener_count);
@@ -584,6 +571,12 @@ int main (int argc, char *argv[])
 	
 	close_listeners(listeners, listener_count);
 	close_log_files(log_files, port_count);
+	
+	if(!database_close(db))
+	{
+		fprintf(stderr, "Failed to close tcpnoise database.\n");
+		return EXIT_FAILURE;
+	}
 	
 	for(size_t i = 0; i < port_count; i++)
 	{
