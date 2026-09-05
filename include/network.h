@@ -4,7 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <stddef.h>
+#include <sys/types.h>
 
 enum receive_status
 {
@@ -28,5 +29,13 @@ int accept_connection(
     int sfd,
     struct sockaddr_storage *peer_addr,
     socklen_t *peer_addr_size);
+
+bool set_receive_timeout(int cfd);
+
+enum receive_status receive_payload(
+    int cfd,
+    char *buffer,
+    size_t buffer_size,
+    ssize_t *bytes_received);
 
 #endif

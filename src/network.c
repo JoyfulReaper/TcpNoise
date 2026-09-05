@@ -5,10 +5,54 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
 #define LISTEN_BACKLOG 64
+
+enum receive_status receive_payload(
+	int cfd,
+	char *buffer,
+	size_t buffer_size,
+	ssize_t *bytes_received)
+{
+	*bytes_received = recv(cfd, buffer, buffer_size, 0);
+	
+	if(*bytes_received > 0)
+		return RECEIVE_DATA;
+	
+	if(*bytes_received == 0)
+		return RECEIVE_CLOSED;
+		
+	if(errno == EAGAIN || errno == EWOULDBLOCK)
+		return RECEIVE_TIMEOUT;
+		
+	if(errno == EINTR)
+		return RECEIVE_INTERRUPTED;
+	
+	return RECEIVE_ERROR;
+}
+
+bool set_receive_timeout(int cfd)
+{
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 250000;
+	
+	if(setsockopt(
+		cfd,
+		SOL_SOCKET,
+		SO_RCVTIMEO,
+		&timeout,
+		sizeof timeout) != 0)
+	{
+		perror("setsockopt SO_RCVTIMEO");
+		return false;
+	}
+	
+	return true;
+}
 
 int create_socket(int family)
 {

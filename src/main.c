@@ -23,7 +23,6 @@
 #include <arpa/inet.h>
 
 #define MAX_PAYLOAD_LEN 256
-#define LISTEN_BACKLOG 64
 #define MAX_PORT 10
 #define MAX_LISTENERS (MAX_PORT * 2)
 
@@ -220,49 +219,6 @@ bool resolve_remote(
 		*remote_port = (uint16_t)parsed_port;
 		return true;
 	}
-}
-
-bool set_receive_timeout(int cfd)
-{
-	struct timeval timeout;
-	timeout.tv_sec = 0;
-	timeout.tv_usec = 250000;
-	
-	if(setsockopt(
-		cfd,
-		SOL_SOCKET,
-		SO_RCVTIMEO,
-		&timeout,
-		sizeof timeout) != 0)
-	{
-		perror("setsockopt SO_RCVTIMEO");
-		return false;
-	}
-	
-	return true;
-}
-
-enum receive_status receive_payload(
-	int cfd,
-	char *buffer,
-	size_t buffer_size,
-	ssize_t *bytes_received)
-{
-	*bytes_received = recv(cfd, buffer, buffer_size, 0);
-	
-	if(*bytes_received > 0)
-		return RECEIVE_DATA;
-	
-	if(*bytes_received == 0)
-		return RECEIVE_CLOSED;
-		
-	if(errno == EAGAIN || errno == EWOULDBLOCK)
-		return RECEIVE_TIMEOUT;
-		
-	if(errno == EINTR)
-		return RECEIVE_INTERRUPTED;
-	
-	return RECEIVE_ERROR;
 }
 
 enum connection_result handle_connection(
