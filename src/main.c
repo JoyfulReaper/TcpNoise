@@ -32,12 +32,19 @@ struct seen_ip
 	unsigned int count;
 };
 
+struct banner_pool
+{
+	char **lines;
+	size_t count;
+};
+
 struct listener
 {
 	int fd;
 	uint16_t port;
 	int family;
 	size_t port_index;
+	struct banner_pool const *banners;
 };
 
 struct connection_event
@@ -503,6 +510,19 @@ enum receive_status receive_payload(
 	return RECEIVE_ERROR;
 }
 
+const char* choose_banner(const struct banner_pool *pool)
+{
+	if(pool == NULL || pool->count == 0)
+		return NULL;
+	
+	int no_banner_chance = rand() % 4;
+	if(no_banner_chance == 3)
+		return NULL;
+	
+	size_t index = rand() % pool->count;
+	return pool->lines[index];
+}
+
 enum connection_result handle_connection(
 	int cfd,
 	const struct listener *listener,
@@ -515,6 +535,16 @@ enum connection_result handle_connection(
 	struct connection_event event;
 	
 	capture_timestamp(event.timestamp, sizeof event.timestamp);
+	
+	const char *banner = choose_banner(listener->banners);
+	if(banner != NULL)
+	{
+		printf("Choosen banner: %s\n", banner);
+	}
+	else
+	{
+		printf("Choosen banner: <none>\n");
+	}
 	
 	event.connection_number = connection_number;
 	event.port = listener->port;
@@ -665,8 +695,86 @@ enum connection_result handle_connection(
 	return CONNECTION_OK;
 }
 
+bool get_banner_filename(uint16_t port, char *buffer, size_t buffer_size)
+{
+	int result = snprintf(buffer, buffer_size, "%" PRIu16 "_banner.txt", port);
+	if (result < 0)
+	{
+		fprintf(stderr, "get_banner_filename: encoding error.\n");
+		return false;
+	}
+	else if(result >= (int)buffer_size)
+	{
+		fprintf(stderr, "get_banner_filename: buffer is too small.\n");
+		return false;
+	}
+	
+	return true;
+}
+
+bool load_banner_file(uint16_t port, struct banner_pool *pool)
+{
+	char filename[32];
+	if(!get_banner_filename(port, filename, sizeof filename))
+	{
+		return false;
+	}
+	
+	FILE *banner_file;
+	banner_file = fopen(filename, "r");
+	if(banner_file == NULL && errno != ENOENT)
+	{
+		perror("fopen");
+		return false;
+	} else if (banner_file == NULL) {
+		return true;
+	}
+	
+	char *line = NULL;
+	size_t capacity = 0;
+	
+	while(getline(&line, &capacity, banner_file) != -1)
+	{
+		line[strcspn(line, "\r\n")] = '\0';
+
+		char **new_lines = realloc(pool->lines, (pool->count + 1) * sizeof *pool->lines);
+		if(new_lines == NULL)
+		{
+			free(line);
+			fclose(banner_file);
+			fprintf(stderr, "realloc failed.\n");
+			return false;
+		}
+		pool->lines = new_lines;
+		char *dup = strdup(line);
+		if(dup == NULL)
+		{
+			perror("strdup");
+			free(line);
+			fclose(banner_file);
+			return false;
+		}
+		pool->lines[pool->count] = dup;
+		pool->count++;
+	}
+
+	if(ferror(banner_file))
+	{
+		perror("getline");
+		free(line);
+		fclose(banner_file);
+		return false;
+	}
+	
+	free(line);
+	fclose(banner_file);
+	return true;
+}
+
 int main (int argc, char *argv[])
 {
+	srand(time(NULL));
+	
 	// Parse port
 	uint16_t ports[MAX_PORT];
 	size_t port_count = 0;
@@ -675,6 +783,7 @@ int main (int argc, char *argv[])
 	size_t listener_count = 0;
 	
 	uint64_t connection_counts[MAX_PORT] = {0};
+	struct banner_pool banner_pools[MAX_PORT] = {0};
 	
 	struct pollfd pollfds[MAX_LISTENERS];
 	
@@ -708,6 +817,13 @@ int main (int argc, char *argv[])
 	// Create, Bind and Listen on socket
 	for(size_t i = 0; i < port_count; i++)
 	{
+		if(!load_banner_file(ports[i], &banner_pools[i]))
+		{
+			fprintf(stderr, "Failed to load banner for port: %" PRIu16 "\n", ports[i]);
+			close_listeners(listeners, listener_count);
+			return EXIT_FAILURE;
+		}
+		
 		for(size_t f = 0; f < family_count; f++)
 		{
 			size_t listener_index = listener_count;
@@ -716,6 +832,7 @@ int main (int argc, char *argv[])
 			listeners[listener_index].port = ports[i];
 			listeners[listener_index].port_index = i;
 			listeners[listener_index].fd = create_socket(listeners[listener_index].family);
+			listeners[listener_index].banners = &banner_pools[i];
 			
 			if (listeners[listener_index].fd < 0)
 			{
