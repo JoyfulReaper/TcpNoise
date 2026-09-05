@@ -45,6 +45,7 @@ struct listener
 	int family;
 	size_t port_index;
 	struct banner_pool const *banners;
+	FILE *log_file;
 };
 
 struct connection_event
@@ -312,9 +313,33 @@ void print_payload(FILE *output, const char *payload, ssize_t length)
 	fputc('\n', output);
 }
 
-// Possible improvment, keep the file open
+void get_log_filename(uint16_t port, char *buffer, size_t buffer_size)
+{
+	snprintf(buffer, buffer_size, "%d.log", port);
+}
+
+bool close_log_files(FILE *log_files[], size_t count)
+{
+	bool success = true;
+	for(size_t i = 0; i < count; i++)
+	{
+		if(log_files[i] != NULL)
+		{
+			if(fclose(log_files[i]) != 0)
+			{
+				perror("fclose");
+				success = false;
+			}
+			log_files[i] = NULL;
+		}
+	}
+	
+	return success;
+}
+
+// TODO: always check return value of fprintf for failure
 bool log_connection (
-	uint16_t port, 
+	FILE *file, 
 	const char *message,
 	const char *payload,
 	ssize_t length,
@@ -326,21 +351,9 @@ bool log_connection (
 		return true;
 	#endif
 	
-	char log_filename[32];
-	snprintf(log_filename, sizeof log_filename, "%d.log", port);
-	
-	FILE *file = fopen(log_filename, "a");
-	if(file == NULL)
-	{
-		perror("fopen");
-		return false;
-	}
-	
 	if(fprintf(file, "%s\n", message) < 0)
 	{
 		fprintf(stderr, "Failed to write to log file.\n");
-			
-		fclose(file);
 		return false;
 	}
 	
@@ -379,11 +392,12 @@ bool log_connection (
 		fprintf(file, "- Payload: <receive error>\n");
 	}
 	
-	if(fclose(file) != 0)
+	if(fflush(file) != 0)
 	{
-		perror("fclose");
+		perror("fflush");
 		return false;
 	}
+	
 	return true;
 }
 
@@ -759,7 +773,7 @@ enum connection_result handle_connection(
 	close(cfd);
 
 	log_connection(
-		listener->port,
+		listener->log_file,
 		log_buffer,
 		event.payload,
 		event.payload_len,
@@ -883,6 +897,8 @@ int main (int argc, char *argv[])
 	uint64_t connection_counts[MAX_PORT] = {0};
 	struct banner_pool banner_pools[MAX_PORT] = {0};
 	
+	FILE *log_files[MAX_PORT] = {0};
+	
 	struct pollfd pollfds[MAX_LISTENERS];
 	
 	int families[] = { AF_INET, AF_INET6 };
@@ -927,6 +943,20 @@ int main (int argc, char *argv[])
 			fprintf(stderr, "Failed to load banner for port: %" PRIu16 "\n", ports[i]);
 			free_banner_pools(banner_pools, port_count);
 			close_listeners(listeners, listener_count);
+			close_log_files(log_files, port_count);
+			return EXIT_FAILURE;
+		}
+		
+		// Open log files
+		char logfilename[64];
+		get_log_filename(ports[i], logfilename, sizeof logfilename);
+		log_files[i] = fopen(logfilename, "a");
+		if(log_files[i] == NULL)
+		{
+			perror("fopen");
+			close_log_files(log_files, port_count);
+			close_listeners(listeners, listener_count);
+			free_banner_pools(banner_pools, port_count);
 			return EXIT_FAILURE;
 		}
 		
@@ -939,9 +969,11 @@ int main (int argc, char *argv[])
 			listeners[listener_index].port_index = i;
 			listeners[listener_index].fd = create_socket(listeners[listener_index].family);
 			listeners[listener_index].banners = &banner_pools[i];
+			listeners[listener_index].log_file = log_files[i];
 			
 			if (listeners[listener_index].fd < 0)
 			{
+				close_log_files(log_files, port_count);
 				close_listeners(listeners, listener_count);
 				free_banner_pools(banner_pools, port_count);
 				return EXIT_FAILURE;
@@ -949,6 +981,7 @@ int main (int argc, char *argv[])
 			
 			if(!bind_socket(listeners[listener_index].fd, listeners[listener_index].port, listeners[listener_index].family))
 			{
+				close_log_files(log_files, port_count);
 				close(listeners[listener_index].fd);
 				free_banner_pools(banner_pools, port_count);
 				close_listeners(listeners, listener_count);
@@ -957,6 +990,7 @@ int main (int argc, char *argv[])
 			
 			if(!listen_socket(listeners[listener_index].fd))
 			{
+				close_log_files(log_files, port_count);
 				close(listeners[listener_index].fd);
 				free_banner_pools(banner_pools, port_count);
 				close_listeners(listeners, listener_count);
@@ -988,6 +1022,7 @@ int main (int argc, char *argv[])
 		if (num_selected == -1)
 		{
 			perror("poll");
+			close_log_files(log_files, port_count);
 			free_banner_pools(banner_pools, port_count);
 			close_listeners(listeners, listener_count);
 			return EXIT_FAILURE;
@@ -1009,6 +1044,7 @@ int main (int argc, char *argv[])
 				}
 				else if(cfd < 0)
 				{
+					close_log_files(log_files, port_count);
 					free_banner_pools(banner_pools, port_count);
 					close_listeners(listeners, listener_count);
 					return EXIT_FAILURE;
@@ -1032,6 +1068,7 @@ int main (int argc, char *argv[])
 				}
 				else if(result == CONNECTION_FATAL)
 				{
+					close_log_files(log_files, port_count);
 					free_banner_pools(banner_pools, port_count);
 					close_listeners(listeners, listener_count);
 					return EXIT_FAILURE;
@@ -1041,6 +1078,7 @@ int main (int argc, char *argv[])
 	}
 	
 	close_listeners(listeners, listener_count);
+	close_log_files(log_files, port_count);
 	
 	for(size_t i = 0; i < port_count; i++)
 	{
