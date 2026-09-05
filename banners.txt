@@ -1,3 +1,10 @@
+User Access Verification
+login:
+OpenWrt login:
+RouterOS login:
+Unauthorized access prohibited
+Press ENTER to continue
+Welcome to Embedded Linux
 +PONG
 -ERR unknown command
 -ERR Protocol error
