@@ -22,7 +22,19 @@ bool close_log_files(FILE *log_files[], size_t count)
 	return success;
 }
 
-void get_log_filename(uint16_t port, char *buffer, size_t buffer_size)
+bool get_log_filename(uint16_t port, char *buffer, size_t buffer_size)
 {
-	snprintf(buffer, buffer_size, "%d.log", port);
+	int result = snprintf(buffer, buffer_size, "%d.log", port);
+	if(result < 0)
+	{
+		fprintf(stderr, "Encoding error\n");
+		return false;
+	}
+	else if(result >= (int)sizeof buffer)
+	{
+		fprintf(stderr, "buffer is too small\n");
+		return false;
+	}
+	
+	return true;
 }
