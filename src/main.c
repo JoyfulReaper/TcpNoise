@@ -44,6 +44,7 @@ struct connection_event
 	char ip[INET6_ADDRSTRLEN];
 	uint64_t seen_count;
 	char timestamp[64];
+	char timestamp_utc[64];
 	char payload[MAX_PAYLOAD_LEN];
 	ssize_t payload_len;
 };
@@ -124,6 +125,28 @@ void handle_signal(int signal)
 	running = 0;
 }
 
+void capture_timestamp_utc(char *buffer, size_t buffer_size)
+{
+	snprintf(buffer, buffer_size, "(unknown time)");
+
+	time_t now = time(NULL);
+	if(now == (time_t)-1)
+	{
+		return;
+	}
+
+	struct tm *t_info = gmtime(&now);
+	if(t_info == NULL)
+	{
+		return;
+	}
+
+	if(strftime(buffer, buffer_size, "%Y-%m-%d %H:%M:%S", t_info) == 0)
+	{
+		snprintf(buffer, buffer_size, "(unknown time)");
+	}
+}
+
 void capture_timestamp(char *buffer, size_t buffer_size)
 {
 	snprintf(buffer, buffer_size, "(unknown time)");
@@ -159,7 +182,8 @@ enum connection_result handle_connection(
 	bool banner_sent = false;
 	
 	capture_timestamp(event.timestamp, sizeof event.timestamp);
-	
+	capture_timestamp_utc(event.timestamp_utc, sizeof event.timestamp_utc);
+
 	const char *banner = choose_banner(listener->banners);
 	if(banner != NULL)
 	{
@@ -212,7 +236,7 @@ enum connection_result handle_connection(
 	if(!database_record_seen_ip(
 		db,
 		event.ip,
-		event.timestamp,
+		event.timestamp_utc,
 		&event.seen_count))
 	{
 		fprintf(stderr, "Failed to update persistent seen-IP table\n");
