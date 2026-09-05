@@ -1,3 +1,7 @@
+#include "banner.h"
+#include "seen.h"
+#include "logging.h"
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -16,9 +20,6 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <arpa/inet.h>
-
-#include "banner.h"
-#include "seen.h"
 
 #define ENABLE_LOGGING
 #define MAX_PAYLOAD_LEN 256
@@ -261,30 +262,6 @@ void print_payload(FILE *output, const char *payload, ssize_t length)
 	}
 
 	fputc('\n', output);
-}
-
-void get_log_filename(uint16_t port, char *buffer, size_t buffer_size)
-{
-	snprintf(buffer, buffer_size, "%d.log", port);
-}
-
-bool close_log_files(FILE *log_files[], size_t count)
-{
-	bool success = true;
-	for(size_t i = 0; i < count; i++)
-	{
-		if(log_files[i] != NULL)
-		{
-			if(fclose(log_files[i]) != 0)
-			{
-				perror("fclose");
-				success = false;
-			}
-			log_files[i] = NULL;
-		}
-	}
-	
-	return success;
 }
 
 // TODO: always check return value of fprintf for failure
