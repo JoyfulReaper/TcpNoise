@@ -576,6 +576,8 @@ enum connection_result handle_connection(
 {
 	struct connection_event event;
 	
+	bool banner_sent = false;
+	
 	capture_timestamp(event.timestamp, sizeof event.timestamp);
 	
 	const char *banner = choose_banner(listener->banners);
@@ -583,9 +585,9 @@ enum connection_result handle_connection(
 	{
 		if(send_banner(cfd, banner))
 		{
-			printf("Sent banner: %s\n", banner);
+			banner_sent = true;
 		} else {
-			printf("Failed to send banner: %s\n", banner);
+			// printf("Failed to send banner: %s\n", banner);
 		}
 	}
 	
@@ -703,6 +705,19 @@ enum connection_result handle_connection(
 	}
 
 	printf("%s\n", output_buffer);
+
+	if(banner == NULL)
+	{
+		printf("           banner: <none>\n");
+	}
+	else if(banner_sent)
+	{
+		printf("           banner: %s\n", banner);
+	}
+	else
+	{
+		printf("           banner: <send failed> %s\n", banner);
+	}
 
 	if(payload_result == RECEIVE_DATA)
 	{
