@@ -2,17 +2,24 @@
 
 `tcpnoise` is a small POSIX C program for observing unsolicited TCP connection noise on public ports.
 
-The project should stay understandable and portable between FreeBSD and Linux. The goal is not to turn it into a packet analyzer, IDS, honeypot framework, or networking framework.
+It began as a simple C/socket exercise and has grown into a useful little network-noise observer.
 
-## Working style
+The project should remain understandable and portable between FreeBSD and Linux.
 
-Implementation will continue in small slices:
+The goal is **not** to turn tcpnoise into a packet analyzer, IDS, full honeypot framework, protocol-emulation framework, or giant networking abstraction.
 
-1. Kyle writes each slice.
-2. Review the change for correctness, portability, ownership, cleanup, and C/POSIX issues.
-3. Fix problems before moving on.
-4. Prefer correct error handling over quick-and-dirty shortcuts.
-5. Do not replace the project with a complete implementation unless explicitly requested.
+---
+
+# Working style
+
+Implementation should continue in small slices:
+
+1. Implement one understandable change.
+2. Build and exercise it.
+3. Review correctness, portability, ownership, cleanup, and error handling.
+4. Fix problems before layering more behavior on top.
+5. Prefer correct C/POSIX behavior over shortcuts.
+6. Do not add complexity merely because a more elaborate architecture is possible.
 
 Keep each slice small enough to understand and test independently.
 
@@ -20,52 +27,96 @@ Keep each slice small enough to understand and test independently.
 
 # Current status
 
-As of 2026-09-05, the original single-port experiment has grown into a useful multi-port network-noise observer.
+As of 2026-09-05, tcpnoise is a functional multi-port TCP network-noise monitor.
 
 Working now:
 
-- multiple TCP ports in one process;
-- explicit IPv4 and IPv6 listeners;
-- `poll()` across listening sockets;
-- remote IPv4/IPv6 address and source-port reporting;
-- per-port connection counters;
-- in-memory seen-IP counts;
-- bounded payload capture with distinct receive states;
-- graceful `SIGINT` / `SIGTERM` shutdown;
-- `SIGPIPE` protection;
-- optional per-port banner files loaded once at startup;
-- multiple candidate banner lines per port;
-- random banner selection with an intentional chance of sending no banner;
-- safe banner sending with partial-write and `EINTR` handling;
-- console reporting for banner sent / none / failed;
-- per-port text logs;
-- banner result and receive result written to logs;
-- one persistent open log file per configured port rather than reopening it for every connection;
-- explicit flushing after each logged event;
-- cleanup of listeners, banner memory, and log handles across normal and fatal paths.
+* multiple TCP ports in one process;
+* explicit IPv4 and IPv6 listeners;
+* `IPV6_V6ONLY` behavior for predictable dual-stack operation;
+* `poll()` across listening sockets;
+* remote IPv4/IPv6 address reporting;
+* remote source-port reporting;
+* per-port connection counters;
+* bounded initial payload capture;
+* distinct receive states;
+* short accepted-client receive timeout;
+* graceful `SIGINT` and `SIGTERM` shutdown;
+* `SIGPIPE` protection;
+* optional per-port banner pools;
+* randomized banner selection;
+* intentional chance of sending no banner;
+* safe partial banner writes;
+* `EINTR` handling during banner sends;
+* per-port text logs;
+* persistent log handles;
+* log flushing after each event;
+* SQLite-backed persistent seen-IP counts;
+* first-seen and last-seen history;
+* SQLite opened once for the process lifetime;
+* parameterized SQLite statements;
+* persistent seen counts across restarts;
+* local timestamps for terminal/text-log display;
+* UTC timestamps for SQLite persistence;
+* separate banner, logging, networking, and database modules.
 
-The current synchronous accepted-client receive timeout is 250 ms. Real public traffic has not yet demonstrated enough listener starvation to justify a fully event-driven accepted-client state machine.
+The old fixed-size in-memory seen-IP table is no longer part of the active runtime design.
 
-The immediate next goal is to split the now-large `main.c` into a few cohesive modules before adding more features.
+SQLite is now authoritative for persistent seen counts.
+
+The current synchronous accepted-client receive timeout remains approximately 250 ms.
+
+Real public traffic has not yet demonstrated enough listener starvation to justify replacing the simple accepted-client path with a full event-driven client state machine.
+
+---
+
+# Immediate next goal
+
+The immediate goal is:
+
+> **Deploy the current implementation to the Ubuntu VPS and exercise the same source on Linux under real public traffic.**
+
+Before or alongside deployment:
+
+1. Remove the obsolete `seen.c` / `seen.h` files.
+2. Build cleanly on FreeBSD.
+3. Build cleanly on Ubuntu/Linux.
+4. Run tcpnoise publicly on a nonprivileged test port such as `2222`.
+5. Verify IPv4 traffic.
+6. Verify IPv6 traffic.
+7. Verify SQLite seen counts persist across process restarts.
+8. Verify text logs continue to work.
+9. Verify banners continue to work.
+10. Verify clean shutdown closes SQLite, logs, listeners, and banner resources.
+
+Do not add Mission Control, classification, or TUI work before the Linux deployment proves the current foundation.
 
 ---
 
 # Goals
 
-- Listen on one or more TCP ports from a single process.
-- Support both IPv4 and IPv6 explicitly.
-- Count total accepted connections per configured port.
-- Track how many times each remote IP has been seen.
-- Persist useful seen-IP history across restarts with SQLite.
-- Safely display a bounded payload preview.
-- Keep useful per-port text logs.
-- Optionally support SQLite-backed connection/event history if it proves useful.
-- Gracefully stop on signals.
-- Optionally send configured per-port banners after accepting a connection.
-- Optionally publish best-effort events to Mission Control.
-- Remain usable on FreeBSD and Linux.
-- Keep dependencies deliberate and minimal.
-- Remain small enough to understand as a learning project.
+Core goals:
+
+* Listen on one or more TCP ports from one process.
+* Support IPv4 and IPv6 explicitly.
+* Count accepted connections per configured port.
+* Track how many times each remote IP has been seen.
+* Preserve seen-IP history across restarts.
+* Safely preview a bounded amount of initial payload data.
+* Keep useful per-port text logs.
+* Gracefully stop on signals.
+* Optionally send shallow configured banners.
+* Remain usable on FreeBSD and Linux.
+* Keep dependencies deliberate and minimal.
+* Remain understandable as a C/POSIX learning project.
+
+Possible later goals:
+
+* Mission Control telemetry;
+* simple scanner/probe classification;
+* SQLite connection-event history;
+* rolling statistics;
+* terminal history and per-port views.
 
 Example usage:
 
@@ -73,7 +124,7 @@ Example usage:
 ./tcpnoise 23 80 2222 2323
 ```
 
-Optional banner files use the convention:
+Optional banner files:
 
 ```text
 23_banner.txt
@@ -82,34 +133,48 @@ Optional banner files use the convention:
 2323_banner.txt
 ```
 
-Each non-empty line is a candidate banner. A configured connection may intentionally receive no banner.
-
-A missing banner file is normal and must not prevent the listener from starting.
+A missing banner file is normal and must not prevent a listener from starting.
 
 ---
 
 # Non-goals
 
-For now, tcpnoise will not:
+tcpnoise will not currently:
 
-- capture raw SYN packets;
-- detect scans that never complete a TCP handshake;
-- implement a full Telnet, HTTP, SSH, TLS, FTP, or other application protocol server;
-- become a general-purpose honeypot framework;
-- attempt to exploit, retaliate against, or aggressively interact with scanners;
-- implement its own TLS stack;
-- implement its own HTTP client;
-- implement its own database engine;
-- implement log rotation internally;
-- become multithreaded merely because threads exist.
+* capture raw SYN packets;
+* observe connections that never complete a TCP handshake;
+* implement full Telnet;
+* implement full HTTP;
+* implement SSH;
+* implement TLS;
+* implement FTP;
+* become a general-purpose honeypot framework;
+* retaliate against scanners;
+* exploit remote systems;
+* perform active counterattacks;
+* implement its own TLS stack;
+* implement its own HTTP client;
+* implement its own database engine;
+* implement log rotation internally;
+* become multithreaded merely because threads exist.
 
-An accepted TCP connection is the unit tcpnoise observes.
+An **accepted TCP connection** is the unit tcpnoise observes.
 
-Banners are intentionally shallow. Sending text that resembles a service banner is in scope. Implementing the corresponding protocol state machine is not.
+Banners remain intentionally shallow.
+
+Sending:
+
+```text
+SSH-2.0-OpenSSH_9.9
+```
+
+is in scope.
+
+Implementing an SSH server is not.
 
 ---
 
-# Target architecture
+# Current architecture
 
 Conceptually:
 
@@ -119,19 +184,10 @@ command-line ports
        v
 per-port state
        |
-       +--> port 23
-       |      banner pool
-       |      text log
-       |      IPv4 listener
-       |      IPv6 listener
-       |
-       +--> port 80
-       |      banner pool
-       |      text log
-       |      IPv4 listener
-       |      IPv6 listener
-       |
-       +--> ...
+       +--> banner pool
+       +--> text log
+       +--> IPv4 listener
+       +--> IPv6 listener
        |
        v
      poll()
@@ -142,25 +198,64 @@ accept ready connection
        +--> optionally choose/send banner
        |
        v
-brief payload receive
+brief bounded recv()
        |
        v
-build connection event
+resolve numeric remote endpoint
        |
-       +--> terminal output
+       v
+persistent SQLite seen-IP update
+       |
+       v
+build/output connection information
+       |
+       +--> terminal
        +--> per-port text log
-       +--> seen-IP update
-       +--> optional SQLite persistence
-       +--> optional Mission Control event
+       |
+       v
+close accepted socket
 ```
 
-IPv4 and IPv6 use explicit listeners rather than relying on IPv4-mapped IPv6 behavior.
+SQLite is opened once during startup and reused throughout the process.
 
-IPv6 listener sockets use `IPV6_V6ONLY` so behavior remains predictable across FreeBSD and Linux.
+IPv4 and IPv6 use separate listener sockets rather than relying on IPv4-mapped IPv6 behavior.
 
-Banner files and text log files are opened/loaded once during startup rather than once per accepted connection.
+Per-port IPv4 and IPv6 listeners share:
 
-SQLite, when added, should be opened once and reused for the life of the process.
+* the same banner pool;
+* the same text log;
+* the same per-port connection counter.
+
+Seen counts are global by address rather than by listening port.
+
+---
+
+# Current source layout
+
+Active source layout:
+
+```text
+07-tcpnoise/
+├── Makefile
+├── README.md
+├── plan.md
+├── banners.txt
+├── include/
+│   ├── banner.h
+│   ├── database.h
+│   ├── logging.h
+│   └── network.h
+└── src/
+    ├── main.c
+    ├── banner.c
+    ├── database.c
+    ├── logging.c
+    └── network.c
+```
+
+`main.c` remains responsible for orchestration and the main event loop.
+
+Do not split every tiny helper into its own `.c`/`.h` pair simply to make the tree look more architectural.
 
 ---
 
@@ -168,78 +263,68 @@ SQLite, when added, should be opened once and reused for the life of the process
 
 Status legend:
 
-- **DONE** — implemented and exercised.
-- **PARTIAL** — useful implementation exists, but planned hardening remains.
-- **NEXT** — immediate work.
-- **PLANNED** — intended future work.
-- **DEFERRED** — only do it if real behavior justifies it.
+* **DONE** — implemented and exercised.
+* **PARTIAL** — useful implementation exists; hardening remains.
+* **NEXT** — immediate work.
+* **PLANNED** — intended future work.
+* **OPTIONAL** — worthwhile but not required for the core project.
+* **DEFERRED** — only implement if real behavior justifies it.
 
 ---
 
-## Phase 1 - Connection model and cleanup — DONE / PARTIAL
+## Phase 1 - Connection model and lifecycle — DONE / PARTIAL
 
-### Slice 1 - Introduce `struct connection_event` — DONE
+### Connection event representation — DONE
 
-Connection information is represented as a struct rather than a loose pile of variables.
+Useful connection information is grouped into `struct connection_event`.
 
-Current useful fields include:
+Current information includes:
 
-- connection number;
-- listening port;
-- remote source port;
-- remote address;
-- seen count;
-- timestamp;
-- payload;
-- payload length.
+* connection number;
+* listening port;
+* remote source port;
+* remote address;
+* persistent seen count;
+* local timestamp;
+* UTC timestamp for persistence;
+* bounded payload;
+* payload length.
 
-Long-running connection counters use `uint64_t`.
+Long-running counters use `uint64_t`.
 
 IPv6-sized address buffers use `INET6_ADDRSTRLEN`.
 
-### Slice 2 - Harden formatting and helper errors — PARTIAL
-
-Already handled in important paths:
-
-- `snprintf()` failure/truncation;
-- timestamp failure fallback;
-- address-resolution failure;
-- socket/setup failures;
-- banner-send errors;
-- log open/flush/close errors.
-
-Remaining cleanup:
-
-- consistently check all `fprintf()` / `fputc()` results where practical;
-- continue reviewing helper ownership and cleanup behavior;
-- consider `localtime_r()` where portability and simplicity make sense.
-
-Do not turn every display failure into a fatal listener failure.
-
-### Slice 3 - Socket setup cleanup — DONE
-
-Implemented:
-
-- `SO_REUSEADDR`;
-- reasonable listen backlog;
-- listener helpers;
-- cleanup helpers.
-
-### Slice 4 - Signal cleanup — DONE
+### Signal handling — DONE
 
 Handled:
 
-- `SIGINT`;
-- `SIGTERM`;
-- `SIGPIPE` ignored for connection-local send failure behavior.
+* `SIGINT`;
+* `SIGTERM`;
+* `SIGPIPE`.
 
-Normal shutdown closes listeners, closes logs, frees banners, and prints final per-port counts.
+`SIGINT` and `SIGTERM` request graceful shutdown.
+
+`SIGPIPE` is ignored so a disappearing client cannot kill tcpnoise during banner transmission.
+
+### Cleanup — DONE / PARTIAL
+
+Normal and major fatal paths clean up:
+
+* accepted sockets;
+* listener sockets;
+* text log handles;
+* banner memory;
+* SQLite connection.
+
+Remaining hardening:
+
+* continue auditing cleanup return values;
+* keep cleanup best-effort so one cleanup failure does not prevent other cleanup;
+* avoid blindly retrying `close()` where platform semantics make that unsafe.
 
 ---
 
 ## Phase 2 - Multiple listening ports — DONE
-
-### Slice 5 - Parse multiple port arguments — DONE
 
 Supports:
 
@@ -247,292 +332,220 @@ Supports:
 ./tcpnoise 23 80 2222 2323
 ```
 
-Includes:
+Implemented:
 
-- at least one port;
-- range validation;
-- malformed-value rejection;
-- duplicate suppression;
-- maximum configured port count.
+* at least one port required;
+* malformed-value rejection;
+* range validation;
+* duplicate suppression;
+* maximum configured port count;
+* per-port connection counters;
+* shared IPv4/IPv6 per-port state.
 
-### Slice 6 - Listener representation — DONE
+Future argument hardening:
 
-Each listener tracks:
+* set `errno = 0` before `strtol()`;
+* explicitly handle `ERANGE`.
 
-- socket descriptor;
-- listening port;
-- address family;
-- configured-port index;
-- banner pool reference;
-- shared per-port log reference.
-
-### Slice 7 - Watch multiple listeners with `poll()` — DONE
-
-One process watches all IPv4/IPv6 listening sockets.
+This is correctness cleanup rather than a blocker for deployment.
 
 ---
 
-## Phase 3 - IPv6 — DONE
+## Phase 3 - IPv6 — DONE / PARTIAL
 
-### Slice 8 - Address-family-independent peer storage — DONE
+Implemented:
 
-Accepted peers use `struct sockaddr_storage`.
+* `sockaddr_storage`;
+* numeric remote address lookup;
+* numeric source-port lookup;
+* explicit IPv4 listener;
+* explicit IPv6 listener;
+* `IPV6_V6ONLY`;
+* bracketed IPv6 endpoint formatting.
 
-### Slice 9 - Numeric remote address and source port — DONE
+Remaining policy decision:
 
-`getnameinfo()` is used with numeric flags.
+### One-family failure
 
-No reverse DNS lookup is performed in the connection path.
+Current startup behavior is strict.
 
-### Slice 10 - Explicit IPv4 and IPv6 listeners — DONE
+If one requested family cannot bind, startup fails.
 
-Every configured port currently creates explicit:
+Possible future behavior:
 
-- `AF_INET` listener;
-- `AF_INET6` listener with `IPV6_V6ONLY`.
+```text
+IPv4 succeeds + IPv6 fails -> warn and continue
+IPv6 succeeds + IPv4 fails -> warn and continue
+both fail                  -> fatal
+```
 
-Future hardening:
-
-- decide whether one-family failure should merely warn when the other family successfully binds;
-- retain predictable behavior on both FreeBSD and Linux.
+Only change this if deployment demonstrates a real portability benefit.
 
 ---
 
 ## Phase 4 - Connection handling — DONE / DEFERRED
 
-### Slice 11 - Extract accepted-client handling from `main()` — DONE
-
-Accepted-client work lives in `handle_connection()`.
-
-### Slice 12 - Preserve receive state — DONE
-
-Receive results distinguish:
-
-- data;
-- orderly peer close;
-- timeout;
-- interrupted receive;
-- receive error.
-
-### Slice 13 - Prevent quiet clients from stalling listeners — DEFERRED
-
-Current behavior:
+Current path:
 
 ```text
 accept
   -> optional banner
   -> blocking recv with ~250 ms timeout
-  -> record event
-  -> close connection
+  -> SQLite seen update
+  -> terminal/log output
+  -> close
 ```
 
-Public testing has not yet shown enough harm to justify a more complex accepted-client event loop.
+Receive state distinguishes:
 
-Only if measurements justify it:
+* data;
+* orderly close;
+* timeout;
+* interrupted receive;
+* receive error.
 
-- add accepted client sockets to `poll()`;
-- track per-client deadlines/state;
-- avoid threads unless there is a demonstrated reason.
+### Fully event-driven accepted clients — DEFERRED
+
+Do **not** implement a client-state machine merely because it would be more sophisticated.
+
+Only reconsider if real public testing shows the synchronous ~250 ms accepted-client path causes meaningful listener starvation.
+
+Possible future design:
+
+* accepted sockets added to `poll()`;
+* per-client state;
+* per-client deadlines;
+* bounded active-client count.
+
+Threads remain unnecessary unless measurements demonstrate otherwise.
 
 ---
 
 ## Phase 5 - Optional per-port banners — DONE / PARTIAL
 
-Banner files use:
+Banner files:
 
 ```text
 <port>_banner.txt
 ```
 
-Each line is currently treated as one candidate textual banner.
-
-### Slice 14 - Load banner pools once at startup — DONE
-
 Implemented:
 
-- one banner pool per configured port;
-- missing file means no banners;
-- line-based candidates;
-- memory cleanup;
-- both IPv4 and IPv6 listeners reference the same per-port pool.
+* files loaded once at startup;
+* missing file is nonfatal;
+* multiple candidates;
+* random candidate selection;
+* approximately 25% intentional no-banner responses;
+* CRLF termination;
+* bounded send buffer;
+* partial `send()` handling;
+* `EINTR` handling;
+* zero-byte send handling;
+* `SIGPIPE` protection;
+* send failure remains connection-local;
+* banner status appears in terminal output;
+* banner status appears in text logs.
 
-Current implementation also intentionally chooses no banner for approximately 25% of connections.
+Remaining optional hardening:
 
-Future hardening:
+* decide whether blank lines are ignored or intentionally represent empty banners;
+* document/enforce maximum candidate length more explicitly;
+* optionally track exact bytes successfully sent;
+* optionally move banner files into a configurable directory.
 
-- decide whether blank lines should be ignored or intentionally mean an empty banner;
-- impose/document a clear maximum candidate length;
-- make banner directory configurable only if useful.
-
-### Slice 15 - Send banner safely after accept — DONE
-
-Implemented:
-
-- CRLF appended;
-- partial `send()` handling;
-- `EINTR` retry;
-- zero-byte send handling;
-- oversized encoded-banner rejection;
-- `SIGPIPE` protection;
-- banner-send failure remains connection-local.
-
-### Slice 16 - Record banner result — PARTIAL
-
-Implemented states:
-
-- no banner selected;
-- banner sent successfully;
-- banner selected but send failed.
-
-These are shown in terminal output and text logs.
-
-Still optional:
-
-- exact banner bytes successfully sent;
-- explicit partial-send result;
-- richer banner metadata in `connection_event`.
-
-Do this before Mission Control if telemetry needs those fields.
+No protocol state machine should be added merely because a banner resembles a real service.
 
 ---
 
-## Phase 6 - Source modularization — NEXT
+## Phase 6 - Source modularization — DONE
 
-`main.c` has grown large enough that cohesive modules now improve clarity.
+The original large `main.c` has been split into cohesive modules.
 
-Do not split everything at once.
-
-### Slice 17 - Extract banner module — NEXT
-
-Create:
+### Banner module — DONE
 
 ```text
 include/banner.h
 src/banner.c
 ```
 
-Move banner-specific code such as:
+Owns:
 
-- banner filename construction;
-- banner-file loading;
-- banner-pool cleanup;
-- banner selection;
-- banner sending.
+* banner filename construction;
+* banner-file loading;
+* banner-pool cleanup;
+* selection;
+* sending.
 
-Keep ownership rules explicit.
-
-Update the Makefile to compile/link the new source file.
-
-Build and test before moving another subsystem.
-
-### Slice 18 - Extract logging module — PLANNED
-
-Create:
+### Logging module — DONE
 
 ```text
 include/logging.h
 src/logging.c
 ```
 
-Move:
+Owns:
 
-- log filename construction;
-- log opening/closing helpers;
-- connection log formatting/writing;
-- log flushing.
+* log filename construction;
+* payload rendering;
+* connection log writing;
+* log-handle cleanup.
 
-Do not let the logging module take ownership of resources it does not own.
-
-### Slice 19 - Extract seen-IP module — PLANNED
-
-Create:
-
-```text
-include/seen.h
-src/seen.c
-```
-
-Move:
-
-- lookup;
-- increment/update;
-- bounded-table policy;
-- later SQLite persistence interface.
-
-### Slice 20 - Extract networking helpers — PLANNED
-
-Only after the previous boundaries feel natural.
-
-Possible files:
+### Networking module — DONE
 
 ```text
 include/network.h
 src/network.c
 ```
 
-Candidates:
+Owns:
 
-- socket creation;
-- bind/listen helpers;
-- accept helper;
-- remote endpoint resolution;
-- receive timeout / payload receive.
+* socket creation;
+* bind;
+* listen;
+* accept;
+* receive timeout;
+* bounded receive;
+* remote endpoint resolution;
+* remote endpoint formatting.
 
-Keep `main.c` responsible for orchestration and the main event loop.
-
-### Possible later shared types
-
-If cross-module structs become awkward, introduce a small shared header such as:
-
-```text
-include/tcpnoise.h
-```
-
-or:
+### Database module — DONE
 
 ```text
-include/types.h
+include/database.h
+src/database.c
 ```
 
-Do not create a giant dumping-ground header preemptively.
+Owns:
+
+* SQLite open;
+* schema initialization;
+* persistent seen-IP update;
+* SQLite close.
+
+### Cleanup — NEXT
+
+Remove obsolete source files from the old in-memory design:
+
+```text
+include/seen.h
+src/seen.c
+```
+
+They should not remain in the tree once SQLite is the sole seen-count implementation.
 
 ---
 
-## Phase 7 - Seen-IP tracking and SQLite persistence — PARTIAL / PLANNED
+## Phase 7 - SQLite seen-IP persistence — DONE / PARTIAL
 
-### Slice 21 - IPv6-capable in-memory seen table — DONE
+SQLite is now the authoritative seen-IP store.
 
-The current table stores IPv4 and IPv6 textual addresses.
-
-A bounded linear table remains acceptable at the current scale.
-
-### Slice 22 - Define full-table behavior — PLANNED
-
-The current fixed table eventually fills.
-
-Choose a predictable policy that does not repeatedly spam errors.
-
-Possible policies:
-
-- stop admitting new addresses but continue updating known ones;
-- replace oldest entries;
-- maintain a bounded rolling cache.
-
-Do not let table exhaustion affect connection acceptance.
-
-### Slice 23 - Persist seen-IP history in SQLite — PLANNED
-
-This is now a real goal because useful scanners can reconnect hundreds of times and the in-memory count resets every process restart.
-
-Use SQLite deliberately rather than inventing a storage format.
-
-Possible database:
+Database:
 
 ```text
 tcpnoise.db
 ```
 
-Possible table:
+Current table:
 
 ```text
 seen_ip
@@ -543,75 +556,211 @@ last_seen_utc  TEXT NOT NULL
 seen_count     INTEGER NOT NULL
 ```
 
-Exact schema can change when implemented.
+Implemented:
 
-Desired behavior:
+* database opened once;
+* database reused for process lifetime;
+* table created if missing;
+* first address observation inserts count `1`;
+* repeated observations increment the count;
+* first-seen timestamp remains unchanged;
+* last-seen timestamp updates;
+* count survives process restarts;
+* IPv4 works;
+* IPv6 works;
+* hostile address strings are parameterized;
+* timestamps are parameterized;
+* `RETURNING seen_count` provides the authoritative value;
+* database timestamps use UTC;
+* console/text logs remain local time.
 
-- database opened once at startup;
-- schema created/migrated deliberately;
-- update existing row when an address is seen;
-- insert new row on first observation;
-- preserve counts across restarts;
-- SQLite failure should be reported clearly;
-- decide whether database failure is fatal at startup or disables persistence while tcpnoise continues;
-- avoid opening/closing SQLite on every event;
-- use prepared statements rather than rebuilding SQL strings for every connection;
-- never concatenate hostile network strings into SQL.
+Current UPSERT behavior conceptually:
 
-Decide whether the in-memory table remains a fast session cache layered over SQLite or whether SQLite becomes authoritative for seen counts.
+```sql
+INSERT ...
+ON CONFLICT(address) DO UPDATE SET
+    last_seen_utc = excluded.last_seen_utc,
+    seen_count = seen_count + 1
+RETURNING seen_count;
+```
 
-Prefer the simplest design that keeps the hot path understandable.
+### Database failure policy — PARTIAL
+
+Current startup behavior:
+
+```text
+database cannot open      -> fatal startup failure
+schema initialization fails -> fatal startup failure
+```
+
+Connection-time persistence failure currently reports an error and the connection can continue with a fallback seen value.
+
+This policy is acceptable for now.
+
+Later decide whether a runtime database failure should:
+
+* keep warning for each failed event;
+* disable persistence after failure;
+* attempt recovery;
+* stop tcpnoise.
+
+Avoid complicated recovery behavior until a real failure mode justifies it.
+
+### SQLite hardening still available
+
+Later cleanup:
+
+* check `sqlite3_finalize()` results consistently;
+* consider stepping a `RETURNING` statement through `SQLITE_DONE` after reading its row;
+* define schema versioning if schema migration becomes necessary;
+* optionally make database path configurable;
+* evaluate WAL only if measurements or concurrent readers justify it.
+
+Do not enable SQLite knobs merely because they exist.
 
 ---
 
-## Phase 8 - Logging and optional SQLite event history — DONE / PLANNED
+## Phase 8 - Linux/VPS deployment and portability — NEXT
 
-### Slice 24 - Persistent per-port text logs — DONE
+This is the immediate phase.
 
-Current text logs remain useful:
+tcpnoise has been exercised on FreeBSD.
+
+Now prove the current modular + SQLite implementation on Ubuntu/Linux.
+
+### Build dependencies
+
+FreeBSD:
+
+```sh
+pkg install sqlite3 pkgconf
+```
+
+Ubuntu/Debian:
+
+```sh
+sudo apt install build-essential pkg-config libsqlite3-dev
+```
+
+### First VPS test
+
+Start with a nonprivileged port:
+
+```sh
+./tcpnoise 2222
+```
+
+Verify:
+
+* IPv4 listener starts;
+* IPv6 listener starts;
+* external IPv4 connection appears;
+* external IPv6 connection appears;
+* payload capture works;
+* banner behavior works;
+* text logging works;
+* SQLite row is created;
+* repeated IP increments;
+* process restart preserves count;
+* `Ctrl+C` shuts down cleanly.
+
+Query:
+
+```sh
+sqlite3 tcpnoise.db \
+    'SELECT * FROM seen_ip ORDER BY seen_count DESC;'
+```
+
+### Firewall
+
+Public watched ports must be explicitly allowed.
+
+IPv4 and IPv6 firewall behavior should both be tested.
+
+### Privileged ports
+
+Ports below 1024 should not justify running the full process as root indefinitely.
+
+On Linux, prefer mechanisms such as:
 
 ```text
-23.log
-80.log
-2222.log
-2323.log
+CAP_NET_BIND_SERVICE
 ```
+
+or service-manager capability configuration.
+
+Deployment privilege handling should remain separate from networking logic.
+
+---
+
+## Phase 9 - Text logging hardening — PLANNED
+
+Current logging is useful and should remain available even with SQLite.
 
 Implemented:
 
-- one `FILE *` opened per configured port;
-- IPv4 and IPv6 listeners share that per-port file;
-- log handles stay open for the process lifetime;
-- each event is flushed;
-- handles are closed exactly once during cleanup;
-- payloads are escaped before logging;
-- banner state is included.
+* one log per configured port;
+* one open `FILE *` per port;
+* IPv4/IPv6 listeners share the file;
+* escaped payload preview;
+* banner state;
+* receive state;
+* explicit flush after events;
+* cleanup at shutdown.
 
-Text logging should remain available even if SQLite is later added.
+Remaining work:
 
-### Slice 25 - Harden log writes — PLANNED
+### Write-result handling
 
-Review all writes for return-value handling.
+Audit relevant:
 
-A failed log write should not crash the listener unless there is a strong reason.
+* `fprintf()`;
+* `fputc()`;
+* `fflush()`;
+* `fclose()`.
 
-Decide whether a persistently broken log should be disabled after repeated failures rather than producing endless error output.
+A broken text log should not automatically stop tcpnoise unless there is a strong reason.
 
-### Slice 26 - Configurable log path — PLANNED
-
-Optionally support a directory such as:
+Possible policy:
 
 ```text
-./logs/23.log
+first persistent log failure
+    -> report
+    -> disable that log
+    -> continue observing traffic
 ```
 
-Do not implement rotation internally.
+Only implement if useful.
 
-Document operating-system `logrotate` or equivalent configuration instead.
+### Configurable paths
 
-### Slice 27 - Evaluate SQLite connection/event logging — OPTIONAL
+Possible future layout:
 
-SQLite may also be useful for querying historical connection events, but do not automatically replace the simple text logs.
+```text
+logs/23.log
+logs/80.log
+tcpnoise.db
+```
+
+Configuration can wait until deployment makes current-working-directory storage inconvenient.
+
+### Rotation
+
+Do not implement log rotation inside tcpnoise.
+
+Use:
+
+* `logrotate`;
+* service-manager tooling;
+* operating-system facilities.
+
+---
+
+## Phase 10 - Optional SQLite connection-event history — OPTIONAL
+
+Seen-IP persistence solves a clear current problem.
+
+A full connection-event table should only be added if there is an actual query/use case.
 
 Possible table:
 
@@ -631,34 +780,37 @@ banner_result
 payload_preview
 ```
 
-Before implementing, decide what problem SQLite event logging solves:
+Potential reasons:
 
-- querying by IP;
-- querying by port;
-- long-term statistics;
-- feeding a future TUI;
-- avoiding text-log parsing.
+* query events by IP;
+* query events by port;
+* historical statistics;
+* scanner classification history;
+* future TUI backing store;
+* avoid parsing text logs.
 
 If implemented:
 
-- reuse one long-lived SQLite connection;
-- use prepared statements;
-- use transactions sensibly;
-- keep payload storage bounded;
-- decide whether raw payload bytes or only escaped/bounded previews belong in the database;
-- text logs may remain enabled alongside SQLite or become independently configurable.
+* reuse the existing SQLite connection;
+* keep payload bounded;
+* parameterize all hostile values;
+* decide whether to store raw bytes or an encoded preview;
+* use transactions sensibly;
+* keep text logging independent.
 
-Do not dual-write merely because it is possible.
+Do not dual-write merely because two storage systems exist.
 
 ---
 
-## Phase 9 - Mission Control telemetry — PLANNED
+## Phase 11 - Mission Control telemetry — PLANNED
 
-Mission Control integration is optional and best effort.
+Mission Control integration remains worthwhile but must be best effort.
 
-Mission Control failure must never stop tcpnoise from accepting connections.
+Rule:
 
-### Slice 28 - Define telemetry configuration
+> Mission Control failure must never stop tcpnoise from observing connections.
+
+### Configuration
 
 Possible environment variables:
 
@@ -670,23 +822,31 @@ TCPNOISE_MC_API_KEY
 
 Never commit the API key.
 
-### Slice 29 - Add HTTP dependency deliberately
+Never write the key to:
+
+* logs;
+* SQLite;
+* banner files;
+* source;
+* telemetry error messages.
+
+### HTTP dependency
 
 Use `libcurl`.
 
-Do not hand-roll HTTP or TLS.
+Do not implement HTTP/TLS manually.
 
-Use `pkg-config` / platform linker flags in a FreeBSD/Linux-friendly way.
+Add the dependency deliberately and keep FreeBSD/Linux build support.
 
-### Slice 30 - Define the connection event
+### Event
 
-Suggested type:
+Possible event type:
 
 ```text
 tcpnoise.connection.accepted
 ```
 
-Suggested metadata:
+Possible payload:
 
 ```json
 {
@@ -698,185 +858,187 @@ Suggested metadata:
   "seenCount": 37,
   "bytesReceived": 0,
   "receiveResult": "timeout",
-  "bannerResult": "sent",
-  "payloadPreview": null
+  "bannerResult": "sent"
 }
 ```
 
-Do not automatically publish complete banner contents.
+Payload previews, if included, must remain bounded and JSON-safe.
 
-Payload previews must remain bounded and safely encoded.
+Do not automatically publish full banner contents.
 
-### Slice 31 - Build valid Mission Control envelopes
-
-Publish to the configured Mission Control API with:
-
-- unique event ID;
-- event type;
-- schema version;
-- UTC occurrence timestamp;
-- JSON object payload.
-
-Do not concatenate hostile payload bytes into JSON without escaping.
-
-### Slice 32 - Best-effort delivery
-
-Policy:
+### Delivery policy
 
 ```text
 publish succeeds -> continue
-publish fails     -> optionally warn, continue
+publish fails     -> warn if useful, continue
 publish times out -> continue
 ```
 
 Do not synchronously retry in the accepted-client path.
 
-If telemetry latency becomes noticeable, consider a small bounded queue later.
+If telemetry latency becomes measurable, consider a small bounded queue later.
 
 ---
 
-## Phase 10 - Optional scanner classification — PLANNED
+## Phase 12 - Scanner/probe classification — PLANNED
+
+This is likely one of the more interesting next features after deployment.
 
 Classify only the bounded bytes tcpnoise already captured.
 
 Possible classifications:
 
-- HTTP request;
-- TLS ClientHello;
-- SSH banner;
-- Telnet negotiation;
-- common bot/login probe;
-- empty/banner-waiting connection;
-- unknown binary payload.
+* HTTP request;
+* TLS ClientHello;
+* SSH banner;
+* Telnet negotiation;
+* common login/bot probe;
+* empty/banner-waiting connection;
+* unknown text;
+* unknown binary data.
 
-Real public traffic has already demonstrated useful examples such as TLS ClientHello payloads arriving on unexpected ports.
+Rules:
 
-Never assume payload data is NUL-terminated.
+* never assume payload is NUL-terminated;
+* use explicit lengths;
+* classification must never make connection handling unsafe;
+* classify conservatively;
+* unknown is a perfectly valid result.
 
-Do not confuse tcpnoise's outbound banner with an inbound scanner payload.
+Real-world background traffic is the point of this feature.
+
+A TLS ClientHello arriving on TCP/23 should be classified as TLS-like traffic, not interpreted as proof that port 23 is actually running TLS.
 
 ---
 
-## Phase 11 - Terminal history, per-port views, and statistics — PLANNED
+## Phase 13 - Statistics and terminal history — PLANNED
 
-Possible future TUI features:
+Possible future statistics:
 
-- scrollback buffer for recent events;
-- per-port tabs/views;
-- current connection totals;
-- per-port totals;
-- receive-result counts;
-- probe classifications;
-- banner sent/none/failed counts;
-- top/recent IPs.
+* total connections;
+* per-port connections;
+* receive-result counts;
+* banner sent/none/failed counts;
+* classification totals;
+* recent IPs;
+* top IPs;
+* IPv4/IPv6 totals.
+
+Possible terminal features:
+
+* bounded scrollback;
+* per-port views;
+* per-port tabs;
+* recent events;
+* top/recent addresses.
 
 Keep the first implementation simple.
 
-Do not add ncurses or another UI dependency until the current plain-terminal output becomes a real limitation.
+Do not add ncurses or another UI dependency until ordinary terminal output becomes an actual limitation.
 
-If SQLite connection history is implemented first, evaluate whether the TUI should query it or maintain a bounded in-memory event buffer.
+If SQLite connection-event history exists by then, decide whether the TUI:
+
+* queries SQLite;
+* keeps a bounded in-memory event buffer;
+* uses both.
 
 ---
 
-# Suggested source layout
+# Remaining correctness/hardening backlog
 
-Near-term target:
+These are worthwhile but should not prevent the current program from being deployed and observed.
 
-```text
-07-tcpnoise/
-├── Makefile
-├── README.md
-├── plan.md
-├── banners.txt
-├── include/
-│   ├── banner.h
-│   ├── logging.h
-│   ├── network.h
-│   └── seen.h
-└── src/
-    ├── main.c
-    ├── banner.c
-    ├── logging.c
-    ├── network.c
-    └── seen.c
-```
+## Argument parsing
 
-Later, if justified:
+* set `errno = 0` before `strtol()`;
+* detect `ERANGE`.
+
+## Timestamp handling
+
+Current behavior intentionally separates:
 
 ```text
-include/
-    telemetry.h
-    database.h
-src/
-    telemetry.c
-    database.c
+terminal/log -> local time
+SQLite       -> UTC
 ```
 
-A dedicated database module may be useful if both seen-IP persistence and optional event logging share one SQLite connection.
+Later:
 
-This is a target, not a rule.
+* derive local and UTC forms from the same `time_t`;
+* consider `localtime_r()` / `gmtime_r()` where portable and useful.
 
-Do not create a `.c`/`.h` pair for every tiny helper just to make the tree look architectural.
+## Formatting
+
+Continue checking:
+
+* `snprintf()`;
+* `fprintf()`;
+* `printf()`;
+* `fputc()`;
+* flush/close results.
+
+Do not make harmless display failures unnecessarily fatal.
+
+## Networking
+
+* continue checking helper return values;
+* decide one-family bind policy;
+* revisit synchronous accepted clients only if real load demonstrates a problem.
+
+## Database
+
+* harden `sqlite3_finalize()` handling;
+* define migration/version behavior if schema evolves;
+* decide runtime database-failure policy;
+* optionally configure DB path.
+
+## Banners
+
+* define blank-line behavior;
+* clearly document maximum candidate length;
+* optionally record exact bytes sent.
 
 ---
 
 # Deployment notes
 
-## Privileged ports
-
-Ports below 1024 normally require additional privilege.
-
-Avoid running the complete process as root long-term merely to bind ports such as 23 or 80.
-
-Possible approaches:
-
-- Linux `CAP_NET_BIND_SERVICE`;
-- service-manager capabilities;
-- bind before dropping privileges.
-
-Keep deployment privilege concerns separate from connection logic.
-
-## Firewall
-
-Every watched port must be allowed by the host firewall if public traffic should reach it.
-
-Verify IPv6 firewall behavior independently.
-
-## Text logs
-
-Use operating-system rotation facilities for long-running deployments.
-
 ## SQLite database
 
-When SQLite persistence is added:
+The database is currently stored in the process working directory:
 
-- choose a configurable database path;
-- document backup expectations;
-- use SQLite locking/journal behavior appropriate for a single-process writer;
-- do not require an external database server.
+```text
+tcpnoise.db
+```
 
-WAL mode can be evaluated if there is a demonstrated benefit; do not enable knobs merely because they exist.
+For a service deployment, choose a persistent writable working directory.
+
+Back up the database like any other useful state file.
+
+SQLite is appropriate for the current single-process writer design.
+
+Do not introduce an external database server.
+
+## Logs
+
+Text logs are also currently relative to the working directory.
+
+Use OS log-rotation facilities for long-running deployment.
 
 ## Banner files
 
-Treat banner files as configuration.
+Banner files are configuration.
 
-Load them once at startup.
+They are loaded once at startup.
 
-Keep candidates bounded.
+Restart tcpnoise after changing banner files if reloading is desired.
 
-Do not implement fake protocol conversations merely because a banner resembles a real service.
+## Public exposure
 
-## Mission Control secrets
+tcpnoise is intentionally exposed to unsolicited network traffic.
 
-Never place API keys in:
+Keep the program itself unprivileged wherever possible.
 
-- source;
-- `plan.md`;
-- banner files;
-- logs;
-- SQLite databases;
-- Git history.
+Do not interpret banner behavior as a security boundary.
 
 ---
 
@@ -884,104 +1046,107 @@ Never place API keys in:
 
 ## Networking
 
-- [x] Multiple ports can be watched simultaneously.
-- [x] Duplicate port arguments are handled.
-- [x] `SO_REUSEADDR` is enabled.
-- [x] Explicit IPv4 and IPv6 listeners exist.
-- [x] IPv6 listeners use `IPV6_V6ONLY`.
-- [x] Remote source port is captured.
-- [x] Accepted client sockets are closed.
-- [x] Listener sockets are cleaned up.
-- [ ] Verify current behavior again on FreeBSD after major refactors.
-- [ ] Verify current behavior again on Linux after major refactors.
-- [ ] Decide whether one-family bind failure may continue with the other family.
+* [x] Multiple ports.
+* [x] Duplicate port suppression.
+* [x] `SO_REUSEADDR`.
+* [x] IPv4 listeners.
+* [x] IPv6 listeners.
+* [x] `IPV6_V6ONLY`.
+* [x] Remote source port.
+* [x] Accepted sockets closed.
+* [x] Listener sockets cleaned up.
+* [x] FreeBSD testing after major refactor.
+* [ ] Linux testing after modularization + SQLite.
+* [ ] Public IPv4 VPS test.
+* [ ] Public IPv6 VPS test.
+* [ ] Decide one-family bind policy.
 
-## Signals and lifecycle
+## Signals/lifecycle
 
-- [x] `SIGINT` shuts down cleanly.
-- [x] `SIGTERM` shuts down cleanly.
-- [x] `SIGPIPE` cannot unexpectedly terminate tcpnoise.
-- [x] Banner memory is freed.
-- [x] Persistent text log handles are closed.
+* [x] `SIGINT`.
+* [x] `SIGTERM`.
+* [x] `SIGPIPE`.
+* [x] Banner cleanup.
+* [x] Text log cleanup.
+* [x] SQLite cleanup.
+* [x] Major fatal paths close SQLite.
 
-## Payload handling
+## Payload
 
-- [x] Receive timeout / close / error are distinguishable.
-- [x] Payload bytes are length-bounded.
-- [x] Payload bytes are not assumed to be a C string.
-- [x] Payload output escapes non-printable bytes.
-- [ ] Continue reviewing terminal-safety assumptions as classification grows.
+* [x] Bounded.
+* [x] Explicit byte length.
+* [x] Not treated as a C string.
+* [x] Escaped output.
+* [x] Timeout/close/error states.
+* [ ] Continue terminal-safety review as classification grows.
 
-## Formatting and errors
+## Seen IP / database
 
-- [x] Major `snprintf()` truncation/failure paths are handled.
-- [x] Address-conversion errors are handled.
-- [x] Timestamp failures have fallback behavior.
-- [ ] Consistently check all relevant stdio write results.
-- [ ] Keep cleanup functions best-effort so one failed cleanup does not prevent the rest.
-
-## Seen IP
-
-- [x] IPv6 addresses fit the current table.
-- [ ] Define quiet behavior when the in-memory table fills.
-- [ ] Persist seen-IP count/history with SQLite.
-- [ ] Decide in-memory-vs-SQLite authority/cache model.
+* [x] IPv4.
+* [x] IPv6.
+* [x] Persistent count.
+* [x] First-seen timestamp.
+* [x] Last-seen timestamp.
+* [x] UTC database timestamps.
+* [x] One long-lived SQLite connection.
+* [x] Parameterized network values.
+* [x] SQLite authoritative for seen counts.
+* [x] Fixed 1000-IP runtime limit removed.
+* [ ] Remove obsolete `seen.c` / `seen.h`.
+* [ ] Harden finalize-result handling.
+* [ ] Define schema migration/version strategy when needed.
+* [ ] Define long-running database-failure policy.
 
 ## Banners
 
-- [x] Missing banner files are nonfatal.
-- [x] Banner files are loaded once.
-- [x] Multiple candidate banners are supported.
-- [x] A connection may intentionally receive no banner.
-- [x] Partial banner writes are handled.
-- [x] `EINTR` during banner send is handled.
-- [x] Banner-send failure does not stop connection handling.
-- [x] Console output records banner state.
-- [x] Text logs record banner state.
-- [ ] Decide blank-line behavior.
-- [ ] Document/enforce candidate length clearly.
-- [ ] Optionally track exact bytes sent.
+* [x] Missing files nonfatal.
+* [x] Loaded once.
+* [x] Multiple candidates.
+* [x] Intentional no-banner path.
+* [x] Partial sends.
+* [x] `EINTR`.
+* [x] `SIGPIPE` protection.
+* [x] Terminal state.
+* [x] Log state.
+* [ ] Blank-line policy.
+* [ ] Candidate-length documentation.
+* [ ] Optional exact bytes-sent tracking.
 
 ## Logging
 
-- [x] Per-port text logs are retained.
-- [x] Text log files stay open for the process lifetime.
-- [x] IPv4/IPv6 listeners for one port share one log handle.
-- [x] Events are flushed after writing.
-- [x] Log handles are cleaned up.
-- [ ] Check every relevant log write result.
-- [ ] Add optional configurable log directory.
-- [ ] Evaluate optional SQLite event logging.
-
-## Database
-
-- [ ] Add SQLite deliberately.
-- [ ] Reuse one database connection rather than opening per event.
-- [ ] Use prepared statements.
-- [ ] Keep hostile network data parameterized.
-- [ ] Define schema/version initialization.
-- [ ] Define behavior if the database becomes unavailable.
-
-## Mission Control
-
-- [ ] Mission Control failure never stops connection handling.
-- [ ] API key is never logged.
-- [ ] Telemetry is valid JSON for hostile/binary input.
-- [ ] Telemetry stays bounded.
-- [ ] Synchronous telemetry does not noticeably stall listeners.
+* [x] Per-port files.
+* [x] Persistent handles.
+* [x] IPv4/IPv6 sharing.
+* [x] Immediate flush.
+* [x] Local timestamps.
+* [x] Cleanup.
+* [ ] Full stdio error audit.
+* [ ] Optional configurable directory.
+* [ ] Optional SQLite event history.
 
 ## Portability
 
-- [ ] No accidental Linux-only behavior.
-- [ ] No accidental FreeBSD-only behavior.
-- [ ] Build remains clean under `-Wall -Wextra -Wpedantic`.
-- [ ] Re-test both platforms after source modularization and SQLite integration.
+* [x] Built/exercised on FreeBSD.
+* [x] SQLite build uses `pkg-config`.
+* [ ] Build current version on Ubuntu.
+* [ ] Exercise current version on Ubuntu.
+* [ ] Verify warning-clean Linux build.
+* [ ] Verify IPv6 on deployed Linux host.
+
+## Mission Control
+
+* [ ] Configuration.
+* [ ] libcurl integration.
+* [ ] bounded valid JSON.
+* [ ] secret handling.
+* [ ] best-effort failure policy.
+* [ ] latency test.
 
 ---
 
-# Definition of done
+# Definition of core done
 
-The expanded tcpnoise project is in a solid finished state when one binary can be run like:
+The core tcpnoise project can be considered solid when one binary can run like:
 
 ```sh
 ./tcpnoise 23 80 2222 2323
@@ -989,24 +1154,29 @@ The expanded tcpnoise project is in a solid finished state when one binary can b
 
 and reliably:
 
-- binds requested ports on IPv4 and IPv6 where available;
-- watches all listeners concurrently;
-- reports the correct listening port;
-- reports remote IPv4/IPv6 address and source port;
-- tracks per-IP seen counts;
-- persists useful seen-IP history across restarts;
-- safely previews bounded payload bytes;
-- optionally sends bounded per-port banners;
-- writes useful per-port text logs;
-- shuts down cleanly;
-- builds cleanly with project warning flags on FreeBSD and Linux.
+* binds the requested ports;
+* supports IPv4 and IPv6;
+* watches listeners concurrently;
+* accepts and closes connections correctly;
+* reports listening port;
+* reports remote address and source port;
+* maintains per-port connection totals;
+* persistently tracks seen-IP counts;
+* records first/last seen history;
+* safely previews bounded payload data;
+* optionally sends bounded banners;
+* writes useful per-port text logs;
+* shuts down cleanly;
+* builds cleanly with project warning flags on FreeBSD and Linux.
 
-Optional but worthwhile additions:
+At the current point, most of that functionality exists.
 
-- SQLite connection/event history;
-- Mission Control telemetry;
-- scanner classification;
-- rolling statistics;
-- scrollback and per-port terminal views.
+The major remaining requirement before calling the **core** done is:
 
-Those are extensions, not excuses to prevent the core project from ever being considered finished.
+> **exercise the current modular + SQLite implementation on Linux/VPS as well as FreeBSD.**
+
+Mission Control, scanner classification, event-history SQLite, statistics, scrollback, and per-port terminal views are extensions.
+
+They should make tcpnoise more interesting.
+
+They should not prevent an already-useful tcpnoise from ever being considered finished.
