@@ -8,19 +8,17 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <errno.h>
-#include <sys/time.h>
 #include <time.h>
 #include <stdint.h>
 #include <inttypes.h>
 #include <poll.h>
-#include <netdb.h>
+#include <stddef.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <string.h>
-#include <arpa/inet.h>
 
 #define MAX_PAYLOAD_LEN 256
 #define MAX_PORT 10
@@ -404,7 +402,14 @@ int main (int argc, char *argv[])
 		
 		// Open log files
 		char logfilename[64];
-		get_log_filename(ports[i], logfilename, sizeof logfilename);
+		if(!get_log_filename(ports[i], logfilename, sizeof logfilename))
+		{
+			fprintf(stderr, "Failed to get log filename for port: %" PRIu16 "\n", ports[i]);
+			close_log_files(log_files, port_count);
+			close_listeners(listeners, listener_count);
+			free_banner_pools(banner_pools, port_count);
+			return EXIT_FAILURE;
+		}
 		log_files[i] = fopen(logfilename, "a");
 		if(log_files[i] == NULL)
 		{
