@@ -2,6 +2,7 @@
 #include "seen.h"
 #include "logging.h"
 #include "network.h"
+#include "database.h"
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -367,6 +368,45 @@ int main (int argc, char *argv[])
 		print_usage(argv[0]);
 		return EXIT_FAILURE;
 	}
+	
+	// DEBUG CODE
+	/*
+	sqlite3 *db = NULL;
+
+	if(!database_open("tcpnoise.db", &db))
+	{
+		fprintf(stderr, "Failed to open tcpnoise database.\n");
+		return EXIT_FAILURE;
+	}
+	
+	if(!database_initialize(db))
+	{
+		database_close(db);
+		return EXIT_FAILURE;
+	}
+	
+	uint64_t seen_count = 0;
+
+	if(!database_record_seen_ip(
+		db,
+		"203.0.113.10",
+		"2026-09-05 17:10:00",
+		&seen_count))
+	{
+		fprintf(stderr, "Failed to record test seen IP.\n");
+		database_close(db);
+		return EXIT_FAILURE;
+	}
+
+	if(!database_close(db))
+	{
+		fprintf(stderr, "Failed to close tcpnoise database.\n");
+		return EXIT_FAILURE;
+	}
+
+	printf("Test seen count: %" PRIu64 "\n", seen_count);
+	*/
+	// END DEBUG CODE
 	
 	// Register signal handler
 	struct sigaction action;
