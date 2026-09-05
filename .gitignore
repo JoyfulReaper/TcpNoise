@@ -16,3 +16,4 @@ tcpnoise
 *.txt
 *.o
 *.core
+*.db
