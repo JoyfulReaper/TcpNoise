@@ -210,10 +210,15 @@ enum connection_result handle_connection(
 		sizeof event.ip,
 		&event.remote_port);
 		
-	event.seen_count = increment_seen_ip(records, record_count, event.ip);
-	if(event.seen_count == 0)
+	enum seen_result seen_result = increment_seen_ip(records, record_count, event.ip, &event.seen_count);
+	if(seen_result == SEEN_ERROR)
 	{
-		fprintf(stderr, "Failed to increment seen count\n");
+		fprintf(stderr, "Failed to update seen-IP table\n");
+		event.seen_count = 0;
+	} else if (seen_result == SEEN_FULL)
+	{
+		fprintf(stderr, "Seen-IP table is full.\n");
+		event.seen_count = 0;
 	}
 
 	char remote_endpoint[INET6_ADDRSTRLEN + 8];
