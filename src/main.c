@@ -523,6 +523,48 @@ const char* choose_banner(const struct banner_pool *pool)
 	return pool->lines[index];
 }
 
+bool send_banner(int cfd, const char *banner)
+{
+	char buffer[256];
+	int res = snprintf(buffer, sizeof buffer, "%s\r\n", banner);
+	if(res < 0)
+	{
+		fprintf(stderr, "Encoding error.\n");
+		return false;
+	}
+	if(res >= (int)sizeof buffer)
+	{
+		fprintf(stderr, "Banner too large for buffer.\n");
+		return false;
+	}
+	
+	size_t total_bytes = res;
+	size_t bytes_sent = 0;
+	
+	while(bytes_sent < total_bytes)
+	{
+		ssize_t sent_now = send(cfd, buffer + bytes_sent, total_bytes - bytes_sent, 0);
+		if(sent_now == -1)
+		{
+			if(errno == EINTR)
+			{
+				continue;
+			}
+			
+			perror("send");
+			return false;
+		}
+		else if(sent_now == 0)
+		{
+			fprintf(stderr, "Zero bytes sent\n");
+			return false;
+		}
+		bytes_sent += (size_t)sent_now;
+	}
+	
+	return true;
+}
+
 enum connection_result handle_connection(
 	int cfd,
 	const struct listener *listener,
@@ -539,11 +581,12 @@ enum connection_result handle_connection(
 	const char *banner = choose_banner(listener->banners);
 	if(banner != NULL)
 	{
-		printf("Choosen banner: %s\n", banner);
-	}
-	else
-	{
-		printf("Choosen banner: <none>\n");
+		if(send_banner(cfd, banner))
+		{
+			printf("Sent banner: %s\n", banner);
+		} else {
+			printf("Failed to send banner: %s\n", banner);
+		}
 	}
 	
 	event.connection_number = connection_number;
@@ -771,6 +814,29 @@ bool load_banner_file(uint16_t port, struct banner_pool *pool)
 	return true;
 }
 
+void free_banner_pool(struct banner_pool *pool)
+{
+	if(pool == NULL)
+		return;
+		
+	for(size_t i = 0; i < pool->count; i++)
+	{
+		free(pool->lines[i]);
+	}
+	free(pool->lines);
+	
+	pool->lines = NULL;
+	pool->count = 0;
+}
+
+void free_banner_pools(struct banner_pool banner_pools[], size_t pool_count)
+{
+	for(size_t i = 0; i < pool_count; i++)
+	{
+		free_banner_pool(&banner_pools[i]);
+	}
+}
+
 int main (int argc, char *argv[])
 {
 	srand(time(NULL));
@@ -814,12 +880,20 @@ int main (int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	
+	action.sa_handler = SIG_IGN;
+	if(sigaction(SIGPIPE, &action, NULL) == -1)
+	{
+		perror("sigaction SIGPIPE");
+		return EXIT_FAILURE;
+	}
+	
 	// Create, Bind and Listen on socket
 	for(size_t i = 0; i < port_count; i++)
 	{
 		if(!load_banner_file(ports[i], &banner_pools[i]))
 		{
 			fprintf(stderr, "Failed to load banner for port: %" PRIu16 "\n", ports[i]);
+			free_banner_pools(banner_pools, port_count);
 			close_listeners(listeners, listener_count);
 			return EXIT_FAILURE;
 		}
@@ -837,12 +911,14 @@ int main (int argc, char *argv[])
 			if (listeners[listener_index].fd < 0)
 			{
 				close_listeners(listeners, listener_count);
+				free_banner_pools(banner_pools, port_count);
 				return EXIT_FAILURE;
 			}
 			
 			if(!bind_socket(listeners[listener_index].fd, listeners[listener_index].port, listeners[listener_index].family))
 			{
 				close(listeners[listener_index].fd);
+				free_banner_pools(banner_pools, port_count);
 				close_listeners(listeners, listener_count);
 				return EXIT_FAILURE;
 			}
@@ -850,6 +926,7 @@ int main (int argc, char *argv[])
 			if(!listen_socket(listeners[listener_index].fd))
 			{
 				close(listeners[listener_index].fd);
+				free_banner_pools(banner_pools, port_count);
 				close_listeners(listeners, listener_count);
 				return EXIT_FAILURE;
 			}
@@ -879,6 +956,7 @@ int main (int argc, char *argv[])
 		if (num_selected == -1)
 		{
 			perror("poll");
+			free_banner_pools(banner_pools, port_count);
 			close_listeners(listeners, listener_count);
 			return EXIT_FAILURE;
 		}
@@ -899,6 +977,7 @@ int main (int argc, char *argv[])
 				}
 				else if(cfd < 0)
 				{
+					free_banner_pools(banner_pools, port_count);
 					close_listeners(listeners, listener_count);
 					return EXIT_FAILURE;
 				}
@@ -921,6 +1000,7 @@ int main (int argc, char *argv[])
 				}
 				else if(result == CONNECTION_FATAL)
 				{
+					free_banner_pools(banner_pools, port_count);
 					close_listeners(listeners, listener_count);
 					return EXIT_FAILURE;
 				}
@@ -929,8 +1009,10 @@ int main (int argc, char *argv[])
 	}
 	
 	close_listeners(listeners, listener_count);
+	
 	for(size_t i = 0; i < port_count; i++)
 	{
+		free_banner_pool(&banner_pools[i]);
 		printf("Port %"PRIu16" connection attempts: %" PRIu64 "\n", ports[i], connection_counts[i]);
 	}
 	
