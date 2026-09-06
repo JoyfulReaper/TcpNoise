@@ -174,6 +174,7 @@ enum connection_result handle_connection(
 	int cfd,
 	const struct listener *listener,
 	sqlite3 *db,
+	natsConnection *nats_connection,
 	uint64_t connection_number,
 	const struct sockaddr_storage *peer_addr,
 	socklen_t peer_addr_size)
@@ -269,6 +270,15 @@ enum connection_result handle_connection(
 		fprintf(stderr,
 			"Failed to update persistent port activity table\n");
 	}
+	
+	messaging_publish_connection(
+		nats_connection,
+		event.connection_number,
+		event.port,
+		ip_version,
+		event.ip,
+		event.remote_port,
+		event.seen_count);
 
 	char remote_endpoint[INET6_ADDRSTRLEN + 8];
 	format_remote_endpoint(
@@ -596,6 +606,7 @@ int main (int argc, char *argv[])
 						cfd,
 						&listeners[i],
 						db,
+						nats_connection,
 						connection_counts[port_index],
 						&peer_addr,
 						peer_addr_size);
