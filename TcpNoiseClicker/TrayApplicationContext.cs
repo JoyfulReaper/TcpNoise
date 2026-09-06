@@ -1,6 +1,7 @@
 ﻿using NATS.Client.Core;
 using NATS.Net;
 using System.Media;
+using System.Text.Json;
 
 namespace TcpNoiseClicker;
 
@@ -16,6 +17,19 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly Task _listenerTask;
 
     private volatile bool _muted;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    private readonly object _statsLock = new();
+    private readonly System.Windows.Forms.Timer _tooltipTimer;
+
+    private DateOnly _statsDate = DateOnly.FromDateTime(DateTime.Now);
+    private int _clicksToday;
+    private string? _lastRemoteAddress;
+    private ushort _lastListenPort;
 
     public TrayApplicationContext()
     {
@@ -54,6 +68,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Visible = true
         };
 
+        _tooltipTimer = new System.Windows.Forms.Timer
+        {
+            Interval = 500
+        };
+
+        _tooltipTimer.Tick += (_, _) => RefreshTooltip();
+        _tooltipTimer.Start();
+
         _listenerTask = Task.Run(
             () => ListenAsync(_cancellation.Token));
     }
@@ -75,16 +97,91 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 Subject,
                 cancellationToken: cancellationToken))
             {
-                if (_muted)
-                    continue;
+                TcpNoiseEventEnvelope? connectionEvent = null;
 
-                PlayClick();
+                try
+                {
+                    connectionEvent = JsonSerializer.Deserialize<TcpNoiseEventEnvelope>(
+                        message.Data,
+                        JsonOptions);
+                }
+                catch (JsonException)
+                {
+                    // Keep clicking even if a future event schema fails to deserialize.
+                }
+
+                if (connectionEvent is not null)
+                {
+                    RecordEvent(connectionEvent.Payload);
+                }
+
+                if (!_muted)
+                {
+                    PlayClick();
+                }
             }
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
         {
         }
+    }
+
+    private void RecordEvent(TcpNoisePayload connection)
+    {
+        lock (_statsLock)
+        {
+            var today = DateOnly.FromDateTime(DateTime.Now);
+
+            if (_statsDate != today)
+            {
+                _statsDate = today;
+                _clicksToday = 0;
+            }
+
+            _clicksToday++;
+            _lastRemoteAddress = connection.RemoteAddress;
+            _lastListenPort = connection.ListenPort;
+        }
+    }
+
+    private void RefreshTooltip()
+    {
+        string text;
+
+        lock (_statsLock)
+        {
+            if (_lastRemoteAddress is null)
+            {
+                text = $"{_clicksToday} clicks today";
+            }
+            else
+            {
+                var address = Truncate(_lastRemoteAddress, 25);
+
+                text =
+                    $"{_clicksToday} today | " +
+                    $"{address} → {_lastListenPort}";
+            }
+        }
+
+        // NotifyIcon.Text has historically had a rather stupidly small limit.
+        if (text.Length > 63)
+        {
+            text = text[..63];
+        }
+
+        _notifyIcon.Text = text;
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        return value[..(maxLength - 1)] + "…";
     }
 
     private void PlayClick()
@@ -107,6 +204,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private async void Exit(object? sender, EventArgs e)
     {
+        _tooltipTimer.Stop();
+        _tooltipTimer.Dispose();
         _notifyIcon.Visible = false;
         _cancellation.Cancel();
 
