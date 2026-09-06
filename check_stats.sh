@@ -16,4 +16,8 @@ sqlite3 -header -box tcpnoise.db \
  LIMIT 10;'
 
 echo "Any IPv6?"
-grep IPv6 *.log | tail
+if grep -q IPv6 *.log; then
+    grep IPv6 *.log | tail
+else
+    echo "No IPv6 connections seen."
+fi
