@@ -180,7 +180,7 @@ bool messaging_publish_connection(
 
     natsStatus status = natsConnection_PublishString(
         connection,
-        "events.tcpnoise.connection",
+        "tcpnoise.connection",
         json);
 
     if(status != NATS_OK)
