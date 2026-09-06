@@ -16,6 +16,15 @@ bool database_initialize(sqlite3 *db)
 		"first_seen_utc TEXT NOT NULL,"
 		"last_seen_utc TEXT NOT NULL,"
 		"seen_count INTEGER NOT NULL"
+		");"
+
+		"CREATE TABLE IF NOT EXISTS port_activity ("
+		"port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),"
+		"ip_version INTEGER NOT NULL CHECK (ip_version IN (4, 6)),"
+		"first_seen_utc TEXT NOT NULL,"
+		"last_seen_utc TEXT NOT NULL,"
+		"connection_count INTEGER NOT NULL,"
+		"PRIMARY KEY (port, ip_version)"
 		");";
 		
 	char *error_message = NULL;
@@ -35,6 +44,84 @@ bool database_initialize(sqlite3 *db)
 		return false;
 	}
 	
+	return true;
+}
+
+bool database_record_port_connection(
+	sqlite3 *db,
+	uint16_t port,
+	int ip_version,
+	const char *timestamp)
+{
+	if(db == NULL ||
+	   timestamp == NULL ||
+	   port == 0 ||
+	   (ip_version != 4 && ip_version != 6))
+	{
+		return false;
+	}
+
+	const char *sql =
+		"INSERT INTO port_activity ("
+		"port, ip_version, first_seen_utc, last_seen_utc, connection_count"
+		") VALUES (?, ?, ?, ?, 1) "
+		"ON CONFLICT(port, ip_version) DO UPDATE SET "
+		"last_seen_utc = excluded.last_seen_utc, "
+		"connection_count = connection_count + 1;";
+		
+	sqlite3_stmt *statement = NULL;
+	
+	int result = sqlite3_prepare_v2(db, sql, -1, &statement, NULL);
+	if(result != SQLITE_OK)
+	{
+		fprintf(stderr, "sqlite3_prepare_v2 port_activity: %s\n", sqlite3_errmsg(db));
+		return false;
+	}
+	
+	result = sqlite3_bind_int(statement, 1, port);
+	if(result != SQLITE_OK)
+	{
+		fprintf(stderr, "sqlite3_bind_int port: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(statement);
+		return false;
+	}
+
+	result = sqlite3_bind_int(statement, 2, ip_version);
+	if(result != SQLITE_OK)
+	{
+		fprintf(stderr, "sqlite3_bind_int ip_version: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(statement);
+		return false;
+	}
+
+	result = sqlite3_bind_text(statement, 3, timestamp, -1, SQLITE_TRANSIENT);
+	if(result != SQLITE_OK)
+	{
+		fprintf(stderr, "sqlite3_bind_text first_seen_utc: %s\n",
+			sqlite3_errmsg(db));
+		sqlite3_finalize(statement);
+		return false;
+	}
+
+	result = sqlite3_bind_text(statement, 4, timestamp, -1, SQLITE_TRANSIENT);
+	if(result != SQLITE_OK)
+	{
+		fprintf(stderr, "sqlite3_bind_text last_seen_utc: %s\n",
+			sqlite3_errmsg(db));
+		sqlite3_finalize(statement);
+		return false;
+	}
+	
+	result = sqlite3_step(statement);
+	if(result != SQLITE_DONE)
+	{
+		fprintf(stderr, "sqlite3_step port_activity: %s\n",
+			sqlite3_errmsg(db));
+		sqlite3_finalize(statement);
+		return false;
+	}
+	
+	sqlite3_finalize(statement);
 	return true;
 }
 

@@ -20,8 +20,8 @@
 #include <netinet/in.h>
 #include <string.h>
 
-#define MAX_PAYLOAD_LEN 256
-#define MAX_PORT 10
+#define MAX_PAYLOAD_LEN 4096
+#define MAX_PORT 11
 #define MAX_LISTENERS (MAX_PORT * 2)
 
 volatile sig_atomic_t running = 1;
@@ -198,6 +198,22 @@ enum connection_result handle_connection(
 	event.connection_number = connection_number;
 	event.port = listener->port;
 
+	int ip_version;
+	if(listener->family == AF_INET)
+	{
+		ip_version = 4;
+	}
+	else if(listener->family == AF_INET6)
+	{
+		ip_version = 6;
+	}
+	else
+	{
+		fprintf(stderr, "Unexpected listener address family: %d\n", listener->family);
+		close(cfd);
+		return CONNECTION_FATAL;
+	}
+
 	if(!set_receive_timeout(cfd))
 	{
 		close(cfd);
@@ -241,6 +257,16 @@ enum connection_result handle_connection(
 	{
 		fprintf(stderr, "Failed to update persistent seen-IP table\n");
 		event.seen_count = 0;
+	}
+
+	if(!database_record_port_connection(
+		db,
+		event.port,
+		ip_version,
+		event.timestamp_utc))
+	{
+		fprintf(stderr,
+			"Failed to update persistent port activity table\n");
 	}
 
 	char remote_endpoint[INET6_ADDRSTRLEN + 8];

@@ -11,6 +11,12 @@ bool database_open(const char *filename, sqlite3 **db);
 
 bool database_close(sqlite3 *db);
 
+bool database_record_port_connection(
+	sqlite3 *db,
+	uint16_t port,
+	int ip_version,
+	const char *timestamp);
+
 bool database_record_seen_ip(
 	sqlite3 *db,
 	const char *address,
