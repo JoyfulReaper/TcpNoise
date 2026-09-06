@@ -2,6 +2,7 @@
 #include "logging.h"
 #include "network.h"
 #include "database.h"
+#include "messaging.h"
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -544,6 +545,9 @@ int main (int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	
+	// Connect to NATS
+	natsConnection *nats_connection = messaging_connect("nats://10.99.0.1:4222");
+	
 	// Main loop
 	while (running) {
 		int num_selected = poll(pollfds, listener_count, -1);
@@ -612,6 +616,7 @@ int main (int argc, char *argv[])
 		}
 	}
 	
+	messaging_disconnect(nats_connection);
 	close_listeners(listeners, listener_count);
 	close_log_files(log_files, port_count);
 	
