@@ -1,3 +1,11 @@
+/*
+ * tcpnoise
+ * A fun little C tool
+ * See what the bots want or something
+ * Copyright 2026 Kyle Givler
+ * Licensed under the 3-Clause BSD License
+ */
+
 #include "banner.h"
 #include "logging.h"
 #include "network.h"
@@ -21,6 +29,7 @@
 #include <netinet/in.h>
 #include <string.h>
 
+#define NATS_SERVER "nats://10.99.0.1:4222"
 #define MAX_PAYLOAD_LEN 4096
 #define MAX_PORT 11
 #define MAX_LISTENERS (MAX_PORT * 2)
@@ -278,7 +287,8 @@ enum connection_result handle_connection(
 		ip_version,
 		event.ip,
 		event.remote_port,
-		event.seen_count);
+		event.seen_count,
+		event.timestamp_utc);
 
 	char remote_endpoint[INET6_ADDRSTRLEN + 8];
 	format_remote_endpoint(
@@ -556,7 +566,7 @@ int main (int argc, char *argv[])
 	}
 	
 	// Connect to NATS
-	natsConnection *nats_connection = messaging_connect("nats://10.99.0.1:4222");
+	natsConnection *nats_connection = messaging_connect(NATS_SERVER);
 	
 	// Main loop
 	while (running) {

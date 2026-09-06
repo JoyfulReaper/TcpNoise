@@ -14,6 +14,7 @@ bool messaging_publish_connection(
     int ip_version,
     const char *remote_address,
     uint16_t remote_port,
-    uint64_t seen_count);
+    uint64_t seen_count,
+    const char *timestamp_utc);
 
 #endif
