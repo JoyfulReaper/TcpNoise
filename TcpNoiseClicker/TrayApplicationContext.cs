@@ -157,7 +157,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             }
             else
             {
-                var address = Truncate(_lastRemoteAddress, 25);
+                var address = TruncateAddress(_lastRemoteAddress, 25);
 
                 text =
                     $"{_clicksToday} today | " +
@@ -174,14 +174,22 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon.Text = text;
     }
 
-    private static string Truncate(string value, int maxLength)
+    private static string TruncateAddress(string value, int maxLength)
     {
         if (value.Length <= maxLength)
         {
             return value;
         }
 
-        return value[..(maxLength - 1)] + "…";
+        const string ellipsis = "…";
+
+        var remaining = maxLength - ellipsis.Length;
+        var startLength = remaining / 2;
+        var endLength = remaining - startLength;
+
+        return value[..startLength]
+            + ellipsis
+            + value[^endLength..];
     }
 
     private void PlayClick()
