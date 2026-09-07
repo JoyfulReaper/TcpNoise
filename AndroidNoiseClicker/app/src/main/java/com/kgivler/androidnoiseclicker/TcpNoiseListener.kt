@@ -64,6 +64,12 @@ class TcpNoiseListener(
                             remoteAddress = json.getString("remoteAddress"),
                             remotePort = json.getInt("remotePort"),
                             seenCount = json.getLong("seenCount"),
+                            banner = if (json.isNull("banner")) {
+                                null
+                            } else {
+                                json.getString("banner")
+                            },
+                            bannerSent = json.optBoolean("bannerSent", false),
                             payloadLength = json.getInt("payloadLength"),
                             payload = json.optString("payload", "")
                         )

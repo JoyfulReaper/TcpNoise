@@ -8,6 +8,8 @@ data class TcpNoisePayload(
     val remoteAddress: String,
     val remotePort: Int,
     val seenCount: Long,
+    val banner: String?,
+    val bannerSent: Boolean,
     val payloadLength: Int,
     val payload: String
 )

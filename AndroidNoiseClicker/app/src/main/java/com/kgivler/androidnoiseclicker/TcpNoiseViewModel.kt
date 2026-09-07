@@ -60,7 +60,7 @@ class TcpNoiseViewModel(
 
         recentEvents.add(0, event)
 
-        if (recentEvents.size > 10) {
+        if (recentEvents.size > 30) {
             recentEvents.removeAt(recentEvents.lastIndex)
         }
 
