@@ -19,11 +19,38 @@ Continue in small slices:
 5. Prefer correct C/POSIX behavior over shortcuts.
 6. Let real Internet traffic justify complexity.
 
+The project is now past the "can this work?" stage.
+
+New complexity should earn its place by solving something observed in real use.
+
 ---
 
 # Current status
 
-As of 2026-09-06, tcpnoise is running successfully against real public traffic on the Ubuntu VPS and has also been exercised on FreeBSD.
+As of 2026-09-07, tcpnoise is running against real public Internet traffic on two VPS sensors:
+
+```text
+New York
+  Ubuntu
+  tcpnoise collector
+       |
+       +---- WireGuard/private network ----+
+                                          |
+Phoenix                                   |
+  Debian                                  |
+  tcpnoise collector                      |
+       |                                  |
+       +---- WireGuard/private network ----+
+                                          |
+                                          v
+                                        NATS
+                                          |
+                                          v
+                                  TcpNoiseClicker
+                                     on Windows
+```
+
+The collector has also been exercised on FreeBSD.
 
 Working now:
 
@@ -45,64 +72,35 @@ Working now:
 - safe partial banner writes;
 - per-port text logs;
 - local timestamps for console/logs and UTC for SQLite;
-- separate banner, logging, networking, and database modules;
-- `check_stats.sh` showing port activity, Hall of Shame, top IPs, recent IPs, and IPv6 sightings;
-- real traffic observed on ports including 23, 80, 443, 8080, 2222, 2323, and 3389.
+- separate banner, logging, networking, database, and messaging modules;
+- `check_stats.sh` showing persistent port activity, top IPs, recent IPs, and IPv6 sightings;
+- live `tcpnoise.connection` publication to NATS;
+- NATS failure is nonfatal to normal collection;
+- Windows `TcpNoiseClicker` live subscriber;
+- first-seen, IPv6, and special-port sounds;
+- successful live delivery from both NY and PHX into the same clicker;
+- real public traffic observed on ports including 23, 80, 443, 8080, 2222, 2323, 3389, and 5432;
+- deployment-specific banner pools, including port-23/Telnet-style bait.
 
-SQLite is now authoritative for persistent seen counts and persistent port activity.
+SQLite is authoritative for persistent seen counts and persistent port activity.
 
-The synchronous accepted-client path is still intentionally simple. Real traffic has not justified a full event-driven client state machine.
+The synchronous accepted-client path is still intentionally simple. Real traffic has produced large connection bursts, but there is not yet enough evidence that the collector itself needs a full event-driven accepted-client state machine.
 
-IPv6 listeners are active, but unsolicited IPv6 traffic has not yet appeared in the observed VPS sample.
+IPv6 listeners are confirmed working end-to-end.
 
----
-
-# Immediate next goal
-
-> **Publish each connection to NATS and make a desktop computer click like a Geiger counter whenever the Internet touches the VPS.**
-
-First NATS slice:
-
-1. Add the NATS C client dependency.
-2. Add a small `messaging.c` / `messaging.h` module.
-3. Connect to NATS once during startup.
-4. Publish one bounded event to `tcpnoise.connection`.
-5. Keep raw captured payload out of the first event.
-6. Treat NATS as best effort: failure must never stop tcpnoise.
-7. Clean up NATS resources on shutdown.
-8. Write a tiny desktop subscriber that plays one click per live event.
-9. Keep the click subscriber non-durable so reconnecting does not replay a backlog.
-10. Optionally configure JetStream to capture the same subject for history and Mission Control.
-
-Initial event shape:
-
-```json
-{
-  "listenPort": 23,
-  "addressFamily": "ipv4",
-  "remoteAddress": "164.92.115.22",
-  "remotePort": 36070,
-  "seenCount": 98,
-  "timestampUtc": "2026-09-06 03:15:42"
-}
-```
-
-Possible later fields:
-
-- receive result;
-- bytes received;
-- banner result;
-- probe classification.
-
-Absolute rule:
-
-> Messaging failure must never interfere with connection collection or SQLite persistence.
+A controlled IPv6 connection from another WireGuard/public-IPv6 host has been observed successfully. A genuinely unsolicited public IPv6 scanner has **not** yet been observed.
 
 ---
 
-# Architecture
+# What changed since the last plan
 
-Current:
+The previous immediate goal was:
+
+> Publish each connection to NATS and make a desktop computer click like a Geiger counter whenever the Internet touches the VPS.
+
+That phase is now working.
+
+The live path is:
 
 ```text
 Internet
@@ -112,30 +110,211 @@ tcpnoise
    |
    +--> terminal
    +--> per-port logs
-   +--> SQLite seen_ip
-   +--> SQLite port_activity
+   +--> SQLite
+   |
+   v
+tcpnoise.connection
+   |
+   v
+NATS
+   |
+   v
+TcpNoiseClicker
+   |
+   v
+click / PEWWW / IPv6 sound / bong
 ```
 
-Next:
+The architecture has also naturally become multi-sensor:
 
 ```text
-                         tcpnoise.connection
-                                 |
-                    +------------+-------------+
-                    |                          |
-                    v                          v
-           live Core NATS subscriber      JetStream
-                    |                          |
-                    v                          +--> Mission Control
-           desktop Geiger click               |
-                                               +--> future .NET API
-                                               |
-                                               +--> other experiments
+tcpnoise NY  -----+
+                  |
+                  +----> tcpnoise.connection ----> NATS ----> subscribers
+                  |
+tcpnoise PHX -----+
 ```
 
-tcpnoise should remain the collector.
+That exposed the next two real problems:
 
-A future HTTP API belongs in a separate .NET service, not in the C collector.
+1. Events do not yet identify which sensor produced them.
+2. Huge scanner bursts can temporarily overwhelm `SoundPlayer` in the desktop clicker.
+
+Those are now more important than inventing another collector feature.
+
+---
+
+# Immediate next goals
+
+## 1. Add sensor/site identity to connection events
+
+The same NATS subject now receives events from multiple collectors.
+
+Today, a subscriber cannot tell whether a connection was seen by NY or PHX.
+
+Add one small identity field to the published event.
+
+Possible values:
+
+```text
+ny
+phx
+```
+
+Prefer runtime/deployment configuration over compiling separate binaries for each location.
+
+A simple environment variable is likely enough:
+
+```text
+TCPNOISE_SENSOR=ny
+TCPNOISE_SENSOR=phx
+```
+
+Possible payload shape:
+
+```json
+{
+  "connectionNumber": 12,
+  "listenPort": 23,
+  "ipVersion": 4,
+  "remoteAddress": "203.0.113.42",
+  "remotePort": 51384,
+  "seenCount": 3,
+  "sensor": "phx"
+}
+```
+
+Requirements:
+
+- one tcpnoise binary should work at every site;
+- missing sensor configuration should behave predictably;
+- sensor identity must be bounded;
+- sensor identity must be JSON escaped correctly;
+- messaging failure must remain nonfatal;
+- adding the field must not affect SQLite/log collection;
+- update the Windows event model to consume the field;
+- display/use the sensor only where useful.
+
+A later option is to use the sensor identity for distinct sounds, but do not make that part of the first slice.
+
+---
+
+## 2. Fix TcpNoiseClicker burst-audio choking
+
+A real Internet burst already demonstrated the problem.
+
+One NY scanner produced roughly:
+
+```text
+1932 connections in about 12 seconds
+```
+
+That is far beyond what `System.Media.SoundPlayer.Play()` should be expected to represent one-for-one in real time.
+
+Observed behavior:
+
+- NATS/event counting continued;
+- sound playback temporarily choked;
+- playback recovered without restarting the app.
+
+The fix should preserve telemetry and event counts while making audio best-effort.
+
+Preferred shape:
+
+```text
+NATS event
+   |
+   +--> always record/count
+   |
+   v
+bounded sound queue
+   |
+   v
+one controlled playback path
+```
+
+Rules:
+
+- never drop the actual received event/count;
+- sound is allowed to be lossy during an extreme burst;
+- do not accumulate minutes of delayed clicking;
+- keep the normal rapid Geiger-counter feel;
+- avoid blocking the NATS subscription loop;
+- bound memory;
+- recover automatically after a burst;
+- keep mute semantics simple.
+
+Possible implementation:
+
+- bounded `Channel<T>`;
+- dedicated audio worker;
+- drop/coalesce excess audio notifications when full;
+- serialize or deliberately throttle playback.
+
+Do not add a large audio framework unless `SoundPlayer` remains inadequate after the bounded queue approach.
+
+---
+
+## 3. Restore Mission Control publication separately
+
+Keep the live clicker subject:
+
+```text
+tcpnoise.connection
+```
+
+ephemeral and simple.
+
+Separately restore Mission Control/history publication using something like:
+
+```text
+events.tcpnoise.connection
+```
+
+or another bridge that matches Mission Control conventions.
+
+Preferred architecture:
+
+```text
+                       tcpnoise.connection
+tcpnoise ---> NATS ------------------------------> live clicker
+      |
+      +----> events.tcpnoise.connection ---------> Mission Control / archive
+```
+
+Alternative:
+
+```text
+tcpnoise ---> tcpnoise.connection ---> bridge ---> events.tcpnoise.connection
+```
+
+Choose whichever keeps tcpnoise least coupled to Mission Control.
+
+Absolute rule:
+
+> Mission Control failure must never interfere with collection or the live clicker path.
+
+---
+
+# Multi-sensor experiments
+
+Running NY and PHX at the same time creates a useful new class of experiment.
+
+Questions worth answering:
+
+- how quickly is a fresh public IP discovered?;
+- which ports attract traffic first?;
+- do the same scanners hit both regions?;
+- how different are repeat-offender populations?;
+- does one region receive more Telnet, HTTP, RDP, PostgreSQL, or other noise?;
+- do scanner bursts happen at both sites at similar times?;
+- which site gets the first genuinely unsolicited IPv6 connection?;
+- do banner responses change follow-up behavior?;
+- do some scanners repeatedly target one destination port while others fan out?
+
+Do not hard-code comparison logic into the collector.
+
+The collector should publish/store facts. Comparison belongs in scripts, SQLite queries, Mission Control, or a later reporting tool.
 
 ---
 
@@ -189,6 +368,12 @@ PRIMARY KEY (address, port, ip_version)
 
 Keep `seen_ip`; it still provides useful global totals.
 
+For now, keep each sensor's SQLite database local.
+
+Do not merge NY and PHX persistence into a distributed database merely because multiple sensors now exist.
+
+Cross-site comparison can happen downstream.
+
 ---
 
 # Lightweight dashboard
@@ -198,102 +383,149 @@ Keep `seen_ip`; it still provides useful global totals.
 Current views:
 
 - persistent port/IP-version leaderboard;
-- Hall of Shame top IP;
 - top 10 most-seen IPs;
 - top 10 most recently seen IPs;
 - quick IPv6 log check.
 
+Running it independently on NY and PHX is currently enough for quick comparison.
+
 Do not replace this with ncurses until the shell version actually becomes limiting.
+
+Possible small improvements later:
+
+- top source-IP -> destination-port combinations;
+- per-port top talkers;
+- connections in the last hour/day;
+- first-seen scanner count;
+- rough connections/minute;
+- sensor name in the heading.
 
 ---
 
-# NATS / Geiger counter phase — NEXT
+# NATS / Geiger counter phase — WORKING
 
-Start with one subject:
+Current subject:
 
 ```text
 tcpnoise.connection
 ```
 
-Do not invent a large subject hierarchy yet.
-
-Possible module:
+Current module:
 
 ```text
 include/messaging.h
 src/messaging.c
 ```
 
-Possible public surface:
-
-```c
-bool messaging_initialize(...);
-bool messaging_publish_connection(...);
-void messaging_close(...);
-```
-
-Exact ownership should follow the NATS C library's actual rules.
-
-Failure policy:
+Current behavior:
 
 ```text
 NATS available       -> publish event
-NATS unavailable     -> warn if useful, continue
+NATS unavailable     -> continue
 publish fails        -> continue
-JetStream unavailable-> continue
+collector shutdown   -> release NATS resources
 ```
 
-No synchronous retry loop in the accepted-client path.
+The desktop subscriber uses live Core NATS semantics.
 
-The desktop clicker should use live Core NATS semantics.
+There is no replay backlog when the clicker reconnects.
 
-JetStream can separately retain the same subject for consumers that actually want history.
+That is intentional for the audible Geiger-counter use case.
 
-Optional future ridiculousness:
+## Remaining NATS work
 
-- different sound/pitch by destination port;
-- rate-limit audio during scanner bursts;
+- add sensor/site identity;
+- decide whether additive schema changes require a schema-version increment;
+- restore/bridge Mission Control publication;
+- confirm reconnect behavior under real network interruption;
+- keep message size bounded;
+- keep JSON escaping correct;
+- avoid raw payload publication until privacy/bounding rules are settled.
+
+---
+
+# TcpNoiseClicker — WORKING, WITH ONE REAL LIMIT
+
+Current behavior:
+
+- Windows tray app;
+- subscribes to `tcpnoise.connection`;
+- records today's event count;
+- remembers the most recent remote endpoint/listening port;
+- mute support;
+- IPv6 sound;
+- first-seen IPv4 sound;
+- special `420` / `42069` bong;
+- normal click fallback.
+
+Current sound precedence:
+
+```text
+420 / 42069
+    |
+    v
+IPv6
+    |
+    v
+first-seen IPv4
+    |
+    v
+port-specific mapping
+    |
+    v
+default click
+```
+
+## Known problem
+
+Large scanner bursts can overwhelm direct `SoundPlayer.Play()` calls.
+
+This is now proven by real traffic rather than theoretical concern.
+
+Fix with bounded/controlled audio playback while preserving all received event counts.
+
+Possible later ridiculousness:
+
+- sensor-specific left/right sound;
+- subtly different click pitch by location;
 - angry clunk for 3389;
-- special noise for 42069 if it ever gets hit.
+- port-specific sounds;
+- optional recent-event window;
+- volume control.
+
+Do not add these before burst handling and sensor identity.
 
 ---
 
-# Mission Control — PLANNED
+# Response banners
 
-Prefer:
+Per-port banner pools are working.
 
-```text
-tcpnoise -> NATS / JetStream -> Mission Control
-```
-
-over teaching tcpnoise to make Mission-Control-specific HTTP calls.
-
-This keeps the collector independent of downstream implementation and availability.
-
----
-
-# Future .NET API — OPTIONAL
-
-If an API becomes useful:
+File format:
 
 ```text
-NATS / JetStream
-      |
-      v
-TcpNoise.Api (.NET)
-      |
-      +--> GET /api/ports
-      +--> GET /api/ips/top
-      +--> GET /api/ips/recent
-      +--> GET /api/ip/{address}
+<port>_banner.txt
 ```
 
-Benefits:
+Each line is one possible one-line response.
 
-- tcpnoise stays small;
-- API crashes do not affect collection;
-- auth/TLS/versioning live in a framework suited for them;
-- NATS becomes the boundary between collection and presentation.
+A shared generic pool can be symlinked:
+
+```sh
+for p in 21 23 80 443 420 2222 2323 3389 5432 8080 42069; do
+    ln -s banners.txt "${p}_banner.txt"
+done
+```
+
+Individual ports can then replace the symlink with specialized pools.
+
+Port 23 is a natural place for Telnet/router/IoT/login-style banners.
+
+This is deployment configuration, not yet a requirement to commit every production banner file into the repository.
+
+Future banner experiments should stay bounded and shallow.
+
+Do not silently evolve banner support into a full protocol emulator.
 
 ---
 
@@ -343,7 +575,15 @@ Rules:
 - unknown is valid;
 - classification failure must never affect connection handling.
 
-Real examples have already included plain HTTP on 443 and a TLS ClientHello-like probe on 3389.
+Real examples have already included:
+
+- HTTP-like probes;
+- TLS ClientHello-like data on unexpected ports;
+- silent/banner-waiting Telnet connections;
+- high-rate scanner bursts;
+- ordinary peer-close probes.
+
+Classification becomes more useful once multi-read capture is good enough that TCP segmentation does not make trivial classifiers misleading.
 
 ---
 
@@ -388,6 +628,8 @@ Rules:
 - deterministic fake responses;
 - do not become a general honeypot framework.
 
+The specialized port-23 banner pool is useful evidence that this could become interesting, but one-line banners are still enough for now.
+
 ---
 
 # Personal Gopherhole output — OPTIONAL
@@ -410,18 +652,87 @@ Before publishing:
 
 This belongs to the personal Gopherhole/content layer, not HappyGopher core.
 
+A future version could show separate NY/PHX pages once sensor identity is propagated cleanly downstream.
+
+---
+
+# FreeBSD support
+
+FreeBSD remains a first-class learning/testing target.
+
+The collector has been built and exercised there.
+
+The NATS C client may need to be built manually when a convenient package is unavailable.
+
+A working source is the fork:
+
+```text
+https://github.com/JoyfulReaper/nats.c
+```
+
+The README contains the concrete FreeBSD build/install/pkg-config steps.
+
+Keep the collector's POSIX assumptions conservative enough to remain usable on both FreeBSD and Linux.
+
+Avoid Linux-only APIs unless there is a clear guarded fallback.
+
+---
+
+# Long-running Linux deployment
+
+Current public sensors run under Linux.
+
+For privileged ports, prefer a narrow capability over running the entire process as root:
+
+```sh
+sudo setcap cap_net_bind_service=+ep ./tcpnoise
+```
+
+For eventual unattended operation, a systemd unit is reasonable.
+
+Possible service properties:
+
+```text
+WorkingDirectory=<tcpnoise directory>
+Restart=on-failure
+Environment=TCPNOISE_SENSOR=phx
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+```
+
+A service unit is useful after runtime configuration is cleaned up.
+
+Do not rush into systemd-specific code inside tcpnoise itself.
+
+---
+
+# Configuration cleanup — NEAR TERM
+
+Several values are still source/build/deployment configuration.
+
+Candidates for runtime configuration:
+
+- NATS URL;
+- NATS subject;
+- sensor/site identity;
+- database path;
+- log directory;
+- banner directory;
+- receive timeout;
+- maybe banner probability.
+
+Do not build a giant configuration system.
+
+Prefer:
+
+1. a few environment variables;
+2. simple CLI flags only when they become worth the parsing complexity.
+
+Sensor identity is the first runtime configuration worth adding because multi-sensor deployment already exists.
+
 ---
 
 # Cleanup / hardening backlog
-
-## Source cleanup
-
-Remove obsolete in-memory seen-IP files when convenient:
-
-```text
-include/seen.h
-src/seen.c
-```
 
 ## Argument parsing
 
@@ -456,14 +767,23 @@ Use OS log rotation rather than building it into tcpnoise.
 
 ## Messaging
 
-When NATS lands:
-
-- understand connection ownership;
+- understand NATS connection ownership;
 - clean up every resource;
 - bound message size;
 - correctly JSON-escape strings;
 - never log credentials;
-- rely on library reconnect behavior rather than inventing a retry framework.
+- rely on library reconnect behavior rather than inventing a retry framework;
+- add sensor identity;
+- decide schema-version policy for additive fields;
+- restore Mission Control publication separately from the live clicker subject.
+
+## Clicker
+
+- bounded audio queue;
+- clean cancellation/disposal of audio worker;
+- no event loss just because sound is dropped;
+- verify tray counts under synthetic and real bursts;
+- optionally include sensor in tooltip later.
 
 ---
 
@@ -481,7 +801,9 @@ When NATS lands:
 - [x] Safe accepted-socket cleanup
 - [x] FreeBSD testing
 - [x] Ubuntu VPS testing
+- [x] Debian VPS testing
 - [x] Real public IPv4 traffic
+- [x] Controlled end-to-end IPv6 connection
 - [ ] Observe real unsolicited IPv6 traffic
 
 ## Persistence / stats
@@ -489,9 +811,9 @@ When NATS lands:
 - [x] Persistent seen-IP count
 - [x] First/last seen
 - [x] Persistent port/IP-version activity
-- [x] Hall of Shame
 - [x] Top IPs
 - [x] Recent IPs
+- [x] Quick IPv6 log check
 - [ ] Source-IP -> destination-port activity
 - [ ] Schema migration/version strategy
 - [ ] Finalize-result hardening
@@ -504,24 +826,52 @@ When NATS lands:
 - [ ] Bounded multi-read
 - [ ] Optional bounded HTTP body capture
 
+## Banners
+
+- [x] Optional per-port banner files
+- [x] Random banner selection
+- [x] Intentional silent percentage
+- [x] Partial-send handling
+- [x] Deployment use of shared symlinked banner pool
+- [x] Deployment use of specialized port-23 banner pool
+- [ ] Optional bounded multi-step interaction
+
 ## NATS / Geiger counter
 
-- [ ] Add NATS C dependency
-- [ ] Add messaging module
-- [ ] Connect once at startup
-- [ ] Publish `tcpnoise.connection`
-- [ ] Make NATS-unavailable nonfatal
-- [ ] Make publish failure nonfatal
-- [ ] Clean shutdown
-- [ ] Desktop live subscriber
-- [ ] Play Geiger click
+- [x] Add NATS C dependency
+- [x] Add messaging module
+- [x] Connect once at startup
+- [x] Publish `tcpnoise.connection`
+- [x] Make NATS-unavailable nonfatal
+- [x] Make publish failure nonfatal
+- [x] Clean shutdown
+- [x] Desktop live subscriber
+- [x] Play Geiger click
+- [x] First-seen sound
+- [x] IPv6 sound
+- [x] Special 420 / 42069 sound
+- [x] Receive events from two collectors
+- [ ] Add sensor/site identity
+- [ ] Fix burst audio choking
 - [ ] Optional per-port sounds
-- [ ] Optional burst-rate handling
-- [ ] Optional JetStream capture
+- [ ] Restore/bridge Mission Control publication
+- [ ] Optional JetStream capture/history if still useful
+
+## Multi-sensor
+
+- [x] NY sensor live
+- [x] PHX sensor live
+- [x] Both reach the same private NATS broker
+- [x] Clicker receives traffic from both
+- [ ] Include sensor identity in event payload
+- [ ] Compare scanner overlap between sites
+- [ ] Compare per-port distributions
+- [ ] Compare burst patterns
+- [ ] Observe first real unsolicited IPv6 scanner
 
 ## Downstream
 
-- [ ] Mission Control JetStream consumer
+- [ ] Mission Control event path restored
 - [ ] Optional .NET API
 - [ ] Keep all downstream failures isolated from tcpnoise
 
@@ -534,7 +884,7 @@ The core tcpnoise project is already substantially proven.
 One binary can run like:
 
 ```sh
-./tcpnoise 23 80 443 2222 2323 3389 8080
+./tcpnoise 23 80 443 2222 2323 3389 5432 8080
 ```
 
 and:
@@ -548,15 +898,29 @@ and:
 - capture bounded payload data;
 - send optional banners;
 - write per-port logs;
+- publish connection events over NATS;
+- continue operating when NATS is unavailable;
 - shut down cleanly;
 - run on FreeBSD and Linux.
 
-The next work is no longer about proving tcpnoise can function.
+The desktop companion can:
 
-It is about making the little program increasingly interesting without wrecking its simplicity.
+- subscribe live;
+- count events;
+- identify first-seen addresses;
+- distinguish IPv6;
+- make the workstation audibly react to Internet garbage.
 
-The immediate next extension is:
+The same live NATS path now accepts events from more than one public sensor.
 
-> **Publish each connection to NATS and make a desktop computer click like a Geiger counter whenever the Internet touches the VPS.**
+That means the project has moved into a new phase.
+
+The next work is not about proving tcpnoise can function.
+
+It is about making a small distributed Internet-noise experiment increasingly useful without wrecking the simplicity that made it fun.
+
+The immediate priorities are:
+
+> **Add sensor identity, make the clicker survive insane bursts gracefully, and restore Mission Control publication without coupling the collector to downstream systems.**
 
 After that, let the garbage decide what deserves to exist next.
