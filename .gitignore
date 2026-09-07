@@ -13,7 +13,7 @@ todos.txt
 
 tcpnoise
 *.log
-*.txt
+*_*.txt
 *.o
 *.core
 *.db

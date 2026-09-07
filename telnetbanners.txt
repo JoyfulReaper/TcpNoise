@@ -1,0 +1,782 @@
+login:
+Login:
+LOGIN:
+Username:
+username:
+User:
+user:
+Password:
+password:
+Please login:
+Please Login:
+User Access Verification
+Login Authentication
+Authentication required
+Authentication Required
+Enter login:
+Enter username:
+Enter Username:
+Login Name:
+login name:
+User Name:
+User name:
+Account:
+account:
+Console login:
+System login:
+Remote login:
+Telnet login:
+Telnet Login:
+TELNET LOGIN:
+Telnet access:
+TELNET ACCESS
+Remote Access Login
+Remote Management Login
+Management Console Login
+Administrator Login
+Admin Login
+Device Login
+Gateway Login
+Router Login
+Switch Login
+Terminal Login
+Console Authentication
+System Authentication
+Remote Authentication
+Authentication:
+Authorization required
+Access authentication
+Access Verification
+Access Login
+Secure Login
+System Access
+Remote System Access
+Network Device Login
+Network Management Login
+Management Interface
+Management Console
+Remote Console
+Console Server Login
+Terminal Server Login
+Embedded Linux login:
+Linux login:
+localhost login:
+router login:
+gateway login:
+switch login:
+server login:
+admin login:
+root login:
+device login:
+console login:
+system login:
+network login:
+camera login:
+dvr login:
+nvr login:
+nas login:
+modem login:
+ap login:
+firewall login:
+vpn login:
+voip login:
+pbx login:
+iot login:
+bridge login:
+repeater login:
+controller login:
+management login:
+service login:
+maintenance login:
+operator login:
+supervisor login:
+technician login:
+support login:
+monitor login:
+guest login:
+shell login:
+BusyBox login:
+BusyBox v1.20.2 login:
+BusyBox v1.22.1 login:
+BusyBox v1.24.1 login:
+BusyBox v1.26.2 login:
+BusyBox v1.28.4 login:
+BusyBox v1.30.1 login:
+BusyBox v1.31.1 login:
+BusyBox v1.33.1 login:
+BusyBox v1.35.0 login:
+BusyBox v1.36.1 login:
+Embedded System Login
+Embedded Device Login
+Embedded Console
+Embedded Linux Console
+Linux 2.6 login:
+Linux 3.4 login:
+Linux 3.10 login:
+Linux 4.1 login:
+Linux 4.4 login:
+Linux 4.9 login:
+Linux 5.4 login:
+GNU/Linux login:
+OpenWrt login:
+OpenWrt console
+OpenWrt login
+DD-WRT login:
+DD-WRT login
+RouterOS login:
+RouterOS Login
+Router Management Console
+Router Management System
+Router Administration
+Router Administration Login
+Wireless Router Login
+Wireless Gateway Login
+Wireless AP Login
+Wireless Controller Login
+Broadband Router Login
+Broadband Gateway Login
+Residential Gateway Login
+Home Gateway Login
+Internet Gateway Login
+DSL Router Login
+DSL Modem Login
+Cable Modem Login
+Fiber Gateway Login
+GPON Gateway Login
+ONT Management Login
+CPE Login
+CPE Management
+CPE Console Login
+Network Appliance Login
+Security Appliance Login
+Firewall Appliance Login
+VPN Appliance Login
+Storage Appliance Login
+NAS Appliance Login
+DVR Console Login
+NVR Console Login
+IP Camera Login
+Camera Management Login
+Surveillance System Login
+Video Recorder Login
+Digital Video Recorder Login
+Network Video Recorder Login
+Security Camera Login
+CCTV Login
+VoIP Gateway Login
+SIP Gateway Login
+PBX Login
+IP Phone Login
+ATA Login
+Media Gateway Login
+Printer Login
+Print Server Login
+JetDirect Login
+UPS Management Login
+PDU Management Login
+Environmental Monitor Login
+Building Controller Login
+Industrial Controller Login
+PLC Management Login
+SCADA Gateway Login
+Remote Terminal Unit Login
+RTU Login
+Serial Device Server Login
+Serial Console Server Login
+Terminal Concentrator Login
+Access Server Login
+Remote Access Server Login
+BMC Login
+IPMI Console Login
+Management Processor Login
+Remote Management Controller Login
+Baseboard Management Login
+Server Management Login
+Out-of-Band Management Login
+OOB Management Login
+Maintenance Console
+Diagnostic Console
+Service Console
+Engineering Console
+Factory Console
+Factory Test Login
+Production Test Login
+Manufacturing Console
+Recovery Console
+Emergency Console
+Debug Console
+Developer Console
+Admin Console
+Superuser Login
+Privileged Login
+Restricted System
+Restricted Access
+Authorized users only
+Authorized Users Only
+AUTHORIZED USERS ONLY
+Private system
+Private System
+PRIVATE SYSTEM
+WARNING: Authorized access only
+WARNING: Authorized users only
+NOTICE: Authorized access only
+NOTICE: This system is restricted
+NOTICE: Unauthorized access prohibited
+Access restricted to authorized users
+Unauthorized access is prohibited
+Unauthorized use is prohibited
+This system is monitored
+Connections are monitored
+Login attempts are monitored
+Remote sessions are monitored
+All activity may be monitored
+System access is logged
+Login activity is logged
+Remote access is logged
+Authentication attempts are logged
+Welcome
+Welcome!
+Welcome to the system
+Welcome to Remote Management
+Welcome to the management console
+Welcome to the console
+Welcome to the router
+Welcome to the gateway
+Welcome to the network appliance
+Welcome to the embedded system
+Welcome to BusyBox
+Welcome to Linux
+Welcome to OpenWrt
+Welcome to RouterOS
+Welcome to the device
+Welcome to Network Management
+Welcome to Remote Access
+Connected.
+Connected
+Connection established
+Remote console connected
+Telnet session established
+Telnet server ready
+TELNET server ready
+Telnet Service
+TELNET SERVICE
+Telnet daemon ready
+Remote terminal ready
+Terminal ready
+Console ready
+System ready
+Device ready
+Management interface ready
+login as:
+Login as:
+User ID:
+UserID:
+userid:
+User ID
+Account name:
+Account Name:
+Login ID:
+Login ID
+Operator:
+Operator Login:
+Administrator:
+Administrator:
+Admin:
+admin:
+root:
+Root:
+ROOT:
+service:
+Service:
+support:
+Support:
+guest:
+Guest:
+maintenance:
+Maintenance:
+operator:
+technician:
+Technician:
+supervisor:
+Supervisor:
+Please enter username:
+Please enter Username:
+Please enter login:
+Please enter user name:
+Please enter account:
+Enter User ID:
+Enter login name:
+Enter account name:
+Enter user:
+Enter User:
+Enter operator:
+Enter administrator name:
+Enter credentials:
+Credentials:
+Credentials required
+Authentication credentials required
+Username required
+Login required
+Password required
+Press ENTER to login
+Press Enter to login
+Press return to login
+Press ENTER for console
+Press ENTER to continue
+Press Enter to continue
+Hit ENTER to continue
+Hit return to continue
+Enter to continue
+Login >
+login >
+Username >
+username >
+User >
+user >
+Admin >
+admin >
+Router >
+router >
+Console >
+console >
+Login:
+Login :
+login :
+Username:
+Username :
+username :
+User:
+User :
+user :
+Password:
+Password :
+password :
+admin@router login:
+admin@gateway login:
+admin@device login:
+root@router login:
+root@gateway login:
+root@device login:
+root@localhost login:
+root@embedded login:
+root@OpenWrt login:
+root@BusyBox login:
+localhost.localdomain login:
+OpenWrt.localdomain login:
+router.localdomain login:
+gateway.localdomain login:
+device.localdomain login:
+embedded.localdomain login:
+console.localdomain login:
+iot-device login:
+iot-gateway login:
+camera-01 login:
+dvr-01 login:
+nvr-01 login:
+router-01 login:
+gateway-01 login:
+switch-01 login:
+ap-01 login:
+modem-01 login:
+firewall-01 login:
+nas-01 login:
+server-01 login:
+device-01 login:
+controller-01 login:
+Welcome to localhost
+Welcome to router
+Welcome to gateway
+Welcome to switch
+Welcome to camera
+Welcome to DVR
+Welcome to NVR
+Welcome to NAS
+Welcome to modem
+Welcome to firewall
+Welcome to controller
+Welcome to embedded Linux
+BusyBox v1.20.2 (built-in shell)
+BusyBox v1.22.1 (built-in shell)
+BusyBox v1.24.1 (built-in shell)
+BusyBox v1.26.2 (built-in shell)
+BusyBox v1.28.4 (built-in shell)
+BusyBox v1.30.1 (built-in shell)
+BusyBox v1.31.1 (built-in shell)
+BusyBox v1.33.1 (built-in shell)
+BusyBox v1.35.0 (built-in shell)
+BusyBox v1.36.1 (built-in shell)
+Embedded Linux 2.6
+Embedded Linux 3.10
+Embedded Linux 4.4
+Embedded Linux 4.9
+Embedded Linux 5.4
+Linux Embedded System
+Linux Network Appliance
+Linux Router Console
+Linux Gateway Console
+Linux Management Console
+Network OS Console
+Network Operating System
+Network Device Console
+Router Operating System
+Gateway Operating System
+Appliance Operating System
+Residential Gateway
+Broadband Gateway
+Wireless Gateway
+Wireless Router
+Network Camera
+IP Camera
+Digital Video Recorder
+Network Video Recorder
+Network Storage
+Network Appliance
+Embedded Controller
+Industrial Gateway
+Serial Gateway
+Remote Management Module
+Management Processor
+System Management Controller
+Remote Access Controller
+Integrated Management Console
+Device Management Console
+Maintenance Interface
+Diagnostic Interface
+Engineering Interface
+Service Interface
+Command Line Interface
+CLI Login
+CLI Authentication
+Command shell login:
+System shell login:
+Remote shell login:
+Console shell login:
+Management shell login:
+Device shell login:
+Router shell login:
+Gateway shell login:
+Access granted after authentication
+Authentication service ready
+Login service ready
+Remote login service ready
+Console service ready
+Waiting for login
+Waiting for authentication
+Waiting for user
+Awaiting login
+Awaiting credentials
+Awaiting username
+User authentication:
+Login authentication:
+System authentication:
+Device authentication:
+Console authentication:
+Router authentication:
+Gateway authentication:
+Management authentication:
+Remote authentication:
+TELNET authentication:
+Telnet authentication:
+TELNET Login
+TELNET Authentication
+TELNET Console
+TELNET Management
+TELNET Remote Access
+TELNET Server
+Telnet Server
+Telnet Service Ready
+Remote Telnet Service
+Remote Telnet Console
+Remote Telnet Login
+Network Telnet Server
+Embedded Telnet Server
+BusyBox Telnet Server
+Linux Telnet Server
+Management Telnet Server
+Administrative Telnet Server
+Router Telnet Server
+Gateway Telnet Server
+Device Telnet Server
+Console Telnet Server
+Diagnostic Telnet Server
+Maintenance Telnet Server
+System Console
+Network Console
+Router Console
+Gateway Console
+Switch Console
+Access Point Console
+Camera Console
+DVR Console
+NVR Console
+NAS Console
+Modem Console
+Firewall Console
+Controller Console
+IoT Console
+Embedded Console
+Administration Console
+Remote Administration Console
+Device Administration Console
+Management CLI
+Router CLI
+Switch CLI
+Gateway CLI
+Firewall CLI
+System CLI
+Embedded CLI
+Device CLI
+Remote CLI
+Operational CLI
+Service CLI
+Maintenance CLI
+Diagnostic CLI
+Technician Console
+Operator Console
+Supervisor Console
+Support Console
+System Maintenance
+Device Maintenance
+Network Maintenance
+Router Maintenance
+Gateway Maintenance
+Factory Maintenance
+Remote Maintenance
+Service Mode
+Maintenance Mode
+Diagnostic Mode
+Engineering Mode
+Factory Mode
+Administrator Mode
+Operator Mode
+Console Mode
+Remote Mode
+Login Mode
+System startup complete
+System initialization complete
+Device initialization complete
+Network initialization complete
+Management service started
+Telnet service started
+Remote access service started
+Console service started
+Authentication service started
+System online
+Device online
+Management online
+Console online
+Remote access online
+Ready for login
+Ready for authentication
+Ready for user input
+Ready.
+READY
+LOGIN
+USERNAME
+USER
+AUTHENTICATION
+ACCESS
+CONSOLE
+SYSTEM LOGIN
+DEVICE LOGIN
+ROUTER LOGIN
+ADMIN LOGIN
+REMOTE LOGIN
+TELNET LOGIN
+login>
+Login>
+LOGIN>
+username>
+Username>
+USERNAME>
+user>
+User>
+USER>
+admin>
+Admin>
+ADMIN>
+root>
+Root>
+ROOT>
+console>
+Console>
+CONSOLE>
+system>
+System>
+SYSTEM>
+router>
+Router>
+ROUTER>
+gateway>
+Gateway>
+GATEWAY>
+device>
+Device>
+DEVICE>
+maintenance>
+Maintenance>
+MAINTENANCE>
+operator>
+Operator>
+OPERATOR>
+support>
+Support>
+SUPPORT>
+service>
+Service>
+SERVICE>
+[login]
+[Login]
+[LOGIN]
+[username]
+[Username]
+[USERNAME]
+[admin login]
+[root login]
+[system login]
+[device login]
+[router login]
+[gateway login]
+[console login]
+[telnet login]
+Login required:
+Authentication required:
+Authorization required:
+User authentication required:
+Administrator authentication required:
+Console login required:
+Remote login required:
+Management login required:
+Device login required:
+System login required:
+Router login required:
+Gateway login required:
+Telnet login required:
+Enter credentials
+Enter login credentials
+Enter account credentials
+Enter administrative credentials
+Enter management credentials
+Enter device credentials
+Enter system credentials
+Enter remote access credentials
+Username or login:
+Login or username:
+Account or username:
+User/Password:
+Username/Password:
+Login/Password:
+Administrator credentials:
+Operator credentials:
+Service credentials:
+Maintenance credentials:
+Management credentials:
+System credentials:
+Remote credentials:
+Telnet credentials:
+Network credentials:
+Device credentials:
+Router credentials:
+Gateway credentials:
+Console credentials:
+Remote Access:
+Remote Management:
+Device Management:
+System Management:
+Network Management:
+Router Management:
+Gateway Management:
+Administration:
+System Administration:
+Device Administration:
+Router Administration:
+Remote Administration:
+Maintenance Access:
+Service Access:
+Administrator Access:
+Operator Access:
+Management Access:
+Console Access:
+System Access:
+Device Access:
+Remote Access Verification
+Console Access Verification
+System Access Verification
+Device Access Verification
+Router Access Verification
+Gateway Access Verification
+Administrative Access Verification
+Remote Management Authentication
+Network Management Authentication
+Device Management Authentication
+System Management Authentication
+Administrator Authentication
+Operator Authentication
+Service Authentication
+Maintenance Authentication
+Root Authentication
+User Authentication
+Account Authentication
+Credential Verification
+Login Verification
+Access Verification:
+Login Verification:
+User Verification:
+Remote User Verification
+Local User Verification
+Administrative User Verification
+Authorized User Login
+Authorized Access Login
+Restricted Login
+Private Login
+Secure Access Login
+Secure Remote Login
+Secure Management Login
+Secure Console Login
+Network Operations Login
+Operations Login
+NOC Login
+Remote Operations Login
+Infrastructure Login
+Appliance Login
+Firmware Console Login
+Bootloader Console Login
+Rescue Console Login
+Recovery Login
+Firmware Login
+Platform Login
+Hardware Management Login
+System Controller Login
+Chassis Management Login
+Board Management Login
+Remote Board Management Login
+Network Boot Console
+Maintenance Shell Login
+Service Shell Login
+Diagnostic Shell Login
+Factory Shell Login
+Test Shell Login
+System Debug Login
+Device Debug Login
+Remote Debug Login
+Engineering Login
+Field Service Login
+Field Technician Login
+Vendor Support Login
+Customer Support Login
+Network Administrator Login
+System Administrator Login
+Device Administrator Login
+Router Administrator Login
+Gateway Administrator Login
+Security Administrator Login
+Storage Administrator Login
+Camera Administrator Login
+DVR Administrator Login
+NVR Administrator Login
+VoIP Administrator Login
+Printer Administrator Login
+UPS Administrator Login
+Switch Administrator Login
+Wireless Administrator Login
+Controller Administrator Login
