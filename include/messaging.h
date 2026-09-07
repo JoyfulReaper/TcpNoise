@@ -9,6 +9,7 @@ void messaging_disconnect(natsConnection *connection);
 
 bool messaging_publish_connection(
     natsConnection *connection,
+    const char *sensor_name,
     uint64_t connection_number,
     uint16_t listen_port,
     int ip_version,
