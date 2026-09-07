@@ -202,6 +202,8 @@ bool messaging_publish_connection(
     const char *remote_address,
     uint16_t remote_port,
     uint64_t seen_count,
+    const char *banner,
+    bool banner_sent,
     const char *payload,
     size_t payload_len,
     const char *timestamp_utc)
@@ -247,9 +249,28 @@ bool messaging_publish_connection(
 		return false;
 	}
 
-    size_t json_size =
+	char *escaped_banner = NULL;
+
+	if(banner != NULL)
+	{
+		escaped_banner = escape_json_bytes(
+			banner,
+			strlen(banner));
+
+		if(escaped_banner == NULL)
+		{
+			fprintf(stderr, "Failed to encode banner\n");
+			free(escaped_payload);
+			free(escaped_sensor);
+
+			return false;
+		}
+	}
+
+	size_t json_size =
 		strlen(escaped_payload) +
 		strlen(escaped_sensor) +
+		(escaped_banner != NULL ? strlen(escaped_banner) : 0) +
 		2048;
 		
 	char *json = malloc(json_size);
@@ -258,6 +279,7 @@ bool messaging_publish_connection(
 		fprintf(stderr, "Failed to allocate NATS event\n");
 		free(escaped_payload);
 		free(escaped_sensor);
+		free(escaped_banner);
 		
 		return false;
 	}
@@ -282,6 +304,8 @@ bool messaging_publish_connection(
 			"\"remoteAddress\":\"%s\","
 			"\"remotePort\":%" PRIu16 ","
 			"\"seenCount\":%" PRIu64 ","
+			"\"banner\":%s%s%s,"
+			"\"bannerSent\":%s,"
 			"\"payloadLength\":%zu,"
 			"\"payload\":\"%s\""
 		"}"
@@ -296,11 +320,16 @@ bool messaging_publish_connection(
 		remote_address,
 		remote_port,
 		seen_count,
+		banner != NULL ? "\"" : "",
+		banner != NULL ? escaped_banner : "null",
+		banner != NULL ? "\"" : "",
+		banner_sent ? "true" : "false",
 		payload_len,
 		escaped_payload);
 
 	free(escaped_payload);
 	free(escaped_sensor);
+	free(escaped_banner);
 
     if(result < 0)
     {

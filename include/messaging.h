@@ -19,6 +19,8 @@ bool messaging_publish_connection(
     const char *remote_address,
     uint16_t remote_port,
     uint64_t seen_count,
+    const char *banner,
+	bool banner_sent,
     const char *payload,
     size_t payload_len,
     const char *timestamp_utc);
