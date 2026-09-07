@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.SoundPool
 import java.util.Collections
+import android.util.Log
 
 class TcpNoiseSoundPlayer(context: Context) {
 
@@ -24,7 +25,7 @@ class TcpNoiseSoundPlayer(context: Context) {
             .build()
 
         soundPool = SoundPool.Builder()
-            .setMaxStreams(8)
+            .setMaxStreams(32)
             .setAudioAttributes(audioAttributes)
             .build()
 
@@ -56,7 +57,7 @@ class TcpNoiseSoundPlayer(context: Context) {
             return
         }
 
-        soundPool.play(
+        val streamId = soundPool.play(
             soundId,
             1.0f,
             1.0f,
@@ -64,6 +65,10 @@ class TcpNoiseSoundPlayer(context: Context) {
             0,
             1.0f
         )
+
+        if (streamId == 0) {
+            Log.d("TcpNoise", "SoundPool could not start sound")
+        }
     }
 
     fun release() {
