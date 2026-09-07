@@ -7,13 +7,19 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -25,6 +31,8 @@ class MainActivity : ComponentActivity() {
     private var latestEvent by mutableStateOf<TcpNoisePayload?>(null)
     private var eventCount by mutableIntStateOf(0)
 
+    private val recentEvents = mutableStateListOf<TcpNoisePayload>()
+
     private lateinit var tcpNoiseListener: TcpNoiseListener
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,6 +42,12 @@ class MainActivity : ComponentActivity() {
             runOnUiThread {
                 latestEvent = event
                 eventCount++
+
+                recentEvents.add(0, event)
+
+                if (recentEvents.size > 20) {
+                    recentEvents.removeAt(recentEvents.lastIndex)
+                }
             }
         }
 
@@ -49,6 +63,7 @@ class MainActivity : ComponentActivity() {
                     TcpNoiseScreen(
                         eventCount = eventCount,
                         latestEvent = latestEvent,
+                        recentEvents = recentEvents,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -61,6 +76,7 @@ class MainActivity : ComponentActivity() {
 fun TcpNoiseScreen(
     eventCount: Int,
     latestEvent: TcpNoisePayload?,
+    recentEvents: List<TcpNoisePayload>,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -98,9 +114,56 @@ fun TcpNoiseScreen(
                         "Seen ${latestEvent.seenCount} times"
             )
 
+            Text("Remote port: ${latestEvent.remotePort}")
+
+            HorizontalDivider()
+
             Text(
-                "Remote port: ${latestEvent.remotePort}"
+                text = "Recent hits",
+                style = MaterialTheme.typography.titleMedium
             )
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(recentEvents) { event ->
+                    TcpNoiseEventRow(event)
+
+                    HorizontalDivider()
+                }
+            }
         }
+    }
+}
+
+@Composable
+fun TcpNoiseEventRow(event: TcpNoisePayload) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = "${event.remoteAddress} → ${event.listenPort}",
+            style = MaterialTheme.typography.bodyLarge
+        )
+
+        Text(
+            text = "${event.sensor} • IPv${event.ipVersion} • Seen ${event.seenCount}",
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        Text(
+            text = "Payload (${event.payloadLength} bytes)",
+            style = MaterialTheme.typography.labelMedium
+        )
+
+        Text(
+            text = event.payload.ifBlank { "<none>" },
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace
+        )
     }
 }
