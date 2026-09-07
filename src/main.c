@@ -291,6 +291,8 @@ enum connection_result handle_connection(
 		event.ip,
 		event.remote_port,
 		event.seen_count,
+		banner,
+		banner_sent,
 		event.payload,
 		event.payload_len > 0 ? (size_t)event.payload_len : 0,
 		event.timestamp_utc);
