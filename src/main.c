@@ -33,6 +33,7 @@
 #define MAX_PAYLOAD_LEN 4096
 #define MAX_PORT 11
 #define MAX_LISTENERS (MAX_PORT * 2)
+#define MAX_SENSOR_NAME 256
 
 volatile sig_atomic_t running = 1;
 
@@ -184,6 +185,7 @@ enum connection_result handle_connection(
 	const struct listener *listener,
 	sqlite3 *db,
 	natsConnection *nats_connection,
+	const char *sensor_name,
 	uint64_t connection_number,
 	const struct sockaddr_storage *peer_addr,
 	socklen_t peer_addr_size)
@@ -282,6 +284,7 @@ enum connection_result handle_connection(
 	
 	messaging_publish_connection(
 		nats_connection,
+		sensor_name,
 		event.connection_number,
 		event.port,
 		ip_version,
@@ -436,6 +439,20 @@ int main (int argc, char *argv[])
 		print_usage(argv[0]);
 		return EXIT_FAILURE;
 	}
+	
+	// Sensor Name
+	const char *sensor_override = getenv("TCPNOISE_SENSOR");
+	char sensor_name[MAX_SENSOR_NAME];
+	if(sensor_override != NULL && sensor_override[0] != '\0')
+	{
+		snprintf(sensor_name, sizeof sensor_name, "%s", sensor_override);
+	}
+	else if(gethostname(sensor_name, sizeof sensor_name) != 0)
+	{
+		perror("gethostname");
+		snprintf(sensor_name, sizeof sensor_name, "unknown");
+	}
+	sensor_name[sizeof sensor_name -1] = '\0';
 	
 	// Register signal handler
 	struct sigaction action;
@@ -617,6 +634,7 @@ int main (int argc, char *argv[])
 						&listeners[i],
 						db,
 						nats_connection,
+						sensor_name,
 						connection_counts[port_index],
 						&peer_addr,
 						peer_addr_size);

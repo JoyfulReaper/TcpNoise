@@ -99,6 +99,7 @@ static bool format_iso8601_timestamp(
 
 bool messaging_publish_connection(
     natsConnection *connection,
+    const char *sensor_name,
     uint64_t connection_number,
     uint16_t listen_port,
     int ip_version,
@@ -148,6 +149,7 @@ bool messaging_publish_connection(
         "\"CorrelationId\":null,"
         "\"CausationId\":null,"
         "\"Payload\":{"
+			"\"sensor\":\"%s\","
             "\"connectionNumber\":%" PRIu64 ","
             "\"listenPort\":%" PRIu16 ","
             "\"ipVersion\":%d,"
@@ -159,6 +161,7 @@ bool messaging_publish_connection(
         event_id,
         occurred_at,
         occurred_at,
+        sensor_name,
         connection_number,
         listen_port,
         ip_version,
