@@ -5,9 +5,11 @@ import io.nats.client.Nats
 import io.nats.client.Options
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
+import io.nats.client.ConnectionListener
 
 class TcpNoiseListener(
-    private val onEvent: (TcpNoisePayload) -> Unit
+    private val onEvent: (TcpNoisePayload) -> Unit,
+    private val onStatusChanged: (String) -> Unit
 ) {
 
     fun start() {
@@ -18,8 +20,21 @@ class TcpNoiseListener(
                 val options = Options.Builder()
                     .server("nats://10.99.0.1:4222")
                     .maxReconnects(-1)
+                    .connectionListener { _, event ->
+                        val status = when (event) {
+                            ConnectionListener.Events.CONNECTED -> "Connected"
+                            ConnectionListener.Events.DISCONNECTED -> "Disconnected"
+                            ConnectionListener.Events.RECONNECTED -> "Connected"
+                            ConnectionListener.Events.CLOSED -> "Disconnected"
+                            else -> event.toString()
+                        }
+
+                        Log.d("TcpNoise", "NATS status: $status")
+                        onStatusChanged(status)
+                    }
                     .build()
 
+                onStatusChanged("Connecting")
                 val connection = Nats.connect(options)
 
                 Log.d("TcpNoise", "Connected to NATS")
