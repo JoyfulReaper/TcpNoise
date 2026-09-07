@@ -7,13 +7,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import android.os.Handler
 import android.os.Looper
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 
-class TcpNoiseViewModel : ViewModel() {
-    
+class TcpNoiseViewModel(
+    application: Application
+) : AndroidViewModel(application) {
+
+    private val soundPlayer = TcpNoiseSoundPlayer(application)
+
     override fun onCleared() {
         listener.stop()
+        soundPlayer.release()
         mainHandler.removeCallbacksAndMessages(null)
+
         super.onCleared()
     }
 
@@ -56,6 +63,8 @@ class TcpNoiseViewModel : ViewModel() {
         if (recentEvents.size > 10) {
             recentEvents.removeAt(recentEvents.lastIndex)
         }
+
+        soundPlayer.play(event)
     }
 
     private fun updateConnectionStatus(status: String) {
