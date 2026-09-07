@@ -5,9 +5,19 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import android.os.Handler
+import android.os.Looper
 import androidx.lifecycle.ViewModel
 
 class TcpNoiseViewModel : ViewModel() {
+    
+    override fun onCleared() {
+        listener.stop()
+        mainHandler.removeCallbacksAndMessages(null)
+        super.onCleared()
+    }
+
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     var latestEvent by mutableStateOf<TcpNoisePayload?>(null)
         private set
@@ -20,7 +30,24 @@ class TcpNoiseViewModel : ViewModel() {
 
     val recentEvents = mutableStateListOf<TcpNoisePayload>()
 
-    fun addEvent(event: TcpNoisePayload) {
+    private val listener = TcpNoiseListener(
+        onEvent = { event ->
+            mainHandler.post {
+                addEvent(event)
+            }
+        },
+        onStatusChanged = { status ->
+            mainHandler.post {
+                updateConnectionStatus(status)
+            }
+        }
+    )
+
+    init {
+        listener.start()
+    }
+
+    private fun addEvent(event: TcpNoisePayload) {
         latestEvent = event
         eventCount++
 
@@ -31,7 +58,7 @@ class TcpNoiseViewModel : ViewModel() {
         }
     }
 
-    fun updateConnectionStatus(status: String) {
+    private fun updateConnectionStatus(status: String) {
         connectionStatus = status
     }
 }

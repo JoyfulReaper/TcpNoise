@@ -29,25 +29,9 @@ import com.kgivler.androidnoiseclicker.ui.theme.AndroidNoiseClickerTheme
 
 class MainActivity : ComponentActivity() {
     private val viewModel: TcpNoiseViewModel by viewModels()
-    private lateinit var tcpNoiseListener: TcpNoiseListener
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        tcpNoiseListener = TcpNoiseListener(
-            onEvent = { event ->
-                runOnUiThread {
-                    viewModel.addEvent(event)
-                }
-            },
-            onStatusChanged = { status ->
-                runOnUiThread {
-                    viewModel.updateConnectionStatus(status)
-                }
-            }
-        )
-
-        tcpNoiseListener.start()
 
         enableEdgeToEdge()
 

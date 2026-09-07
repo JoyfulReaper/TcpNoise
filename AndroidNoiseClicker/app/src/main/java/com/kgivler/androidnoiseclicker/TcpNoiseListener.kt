@@ -6,12 +6,14 @@ import io.nats.client.Options
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import io.nats.client.ConnectionListener
+import io.nats.client.Connection
 
 class TcpNoiseListener(
     private val onEvent: (TcpNoisePayload) -> Unit,
     private val onStatusChanged: (String) -> Unit
 ) {
-
+    @Volatile
+    private var connection: Connection? = null
     fun start() {
         Thread {
             try {
@@ -35,11 +37,14 @@ class TcpNoiseListener(
                     .build()
 
                 onStatusChanged("Connecting")
-                val connection = Nats.connect(options)
+                connection = Nats.connect(options)
+
+                val activeConnection = connection
+                    ?: return@Thread
 
                 Log.d("TcpNoise", "Connected to NATS")
 
-                val dispatcher = connection.createDispatcher { message ->
+                val dispatcher = activeConnection.createDispatcher { message ->
                     val text = String(
                         message.data,
                         StandardCharsets.UTF_8
@@ -75,5 +80,15 @@ class TcpNoiseListener(
                 Log.e("TcpNoise", "NATS connection failed", ex)
             }
         }.start()
+    }
+
+    fun stop() {
+        try {
+            connection?.close()
+        } catch (ex: Exception) {
+            Log.e("TcpNoise", "Failed to close NATS connection", ex)
+        } finally {
+            connection = null
+        }
     }
 }
