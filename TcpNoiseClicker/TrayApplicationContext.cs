@@ -2,6 +2,7 @@
 using NATS.Net;
 using System.Media;
 using System.Text.Json;
+using System.Threading.Channels;
 
 namespace TcpNoiseClicker;
 
@@ -36,6 +37,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private int _clicksToday;
     private string? _lastRemoteAddress;
     private ushort _lastListenPort;
+
+    private const int SoundQueueCapacity = 32;
+    private readonly Channel<TcpNoisePayload?> _soundQueue;
+    private readonly Task _soundTask;
 
     public TrayApplicationContext()
     {
@@ -72,6 +77,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tooltipTimer.Tick += (_, _) => RefreshTooltip();
         _tooltipTimer.Start();
 
+        _soundQueue = Channel.CreateBounded<TcpNoisePayload?>(
+            new BoundedChannelOptions(SoundQueueCapacity)
+            {
+                SingleReader = true,
+                SingleWriter = true,
+                FullMode = BoundedChannelFullMode.Wait
+            });
+
+        _soundTask = Task.Run(
+            () => PlaySoundsAsync(_cancellation.Token));
+
         _listenerTask = Task.Run(
             () => ListenAsync(_cancellation.Token));
     }
@@ -98,9 +114,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 try
                 {
                     connectionEvent =
-                        JsonSerializer.Deserialize<TcpNoiseEventEnvelope>(
-                            message.Data,
-                            JsonOptions);
+                        JsonSerializer.Deserialize<TcpNoiseEventEnvelope>(message.Data, JsonOptions);
                 }
                 catch (JsonException)
                 {
@@ -115,8 +129,23 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
                 if (!_muted)
                 {
-                    PlaySound(connectionEvent?.Payload);
+                    _soundQueue.Writer.TryWrite(connectionEvent?.Payload);
                 }
+            }
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task PlaySoundsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (var connection in _soundQueue.Reader.ReadAllAsync(cancellationToken))
+            {
+                PlaySound(connection);
             }
         }
         catch (OperationCanceledException)
@@ -200,7 +229,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         try
         {
-            player.Play();
+            player.PlaySync();
         }
         catch
         {
@@ -243,10 +272,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private static SoundPlayer LoadRequiredSound(string fileName)
     {
-        var path = Path.Combine(
-            AppContext.BaseDirectory,
-            fileName);
-
+        var path = Path.Combine(AppContext.BaseDirectory, fileName);
         var player = new SoundPlayer(path);
 
         try
@@ -270,9 +296,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private static SoundPlayer? TryLoadSound(string fileName)
     {
-        var path = Path.Combine(
-            AppContext.BaseDirectory,
-            fileName);
+        var path = Path.Combine(AppContext.BaseDirectory, fileName);
 
         if (!File.Exists(path))
         {
@@ -306,6 +330,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _notifyIcon.Visible = false;
         _cancellation.Cancel();
+
+        try
+        {
+            await Task.WhenAll(_listenerTask, _soundTask);
+        }
+        catch (OperationCanceledException)
+        {
+        }
 
         try
         {
