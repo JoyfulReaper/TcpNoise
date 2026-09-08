@@ -80,6 +80,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Visible = true
         };
 
+        _notifyIcon.DoubleClick += ShowHistory;
+
         _tooltipTimer = new System.Windows.Forms.Timer
         {
             Interval = 500

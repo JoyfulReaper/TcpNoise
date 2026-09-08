@@ -26,6 +26,8 @@ internal sealed class HistoryForm : Form
             AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells
         };
 
+        _grid.CellDoubleClick += Grid_CellDoubleClick;
+
         _grid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "Time",
@@ -118,7 +120,7 @@ internal sealed class HistoryForm : Form
                 ? tcpEvent.Payload
                 : "<none>";
 
-            _grid.Rows.Add(
+            var rowIndex = _grid.Rows.Add(
                 entry.ReceivedAt.ToString("HH:mm:ss"),
                 tcpEvent.Sensor,
                 $"{tcpEvent.RemoteAddress}:{tcpEvent.RemotePort}",
@@ -127,6 +129,26 @@ internal sealed class HistoryForm : Form
                 tcpEvent.SeenCount,
                 banner,
                 payload);
+
+            _grid.Rows[rowIndex].Tag = entry;
         }
+    }
+
+    private void Grid_CellDoubleClick(
+        object? sender,
+        DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0)
+        {
+            return;
+        }
+
+        if (_grid.Rows[e.RowIndex].Tag is not HistoryEntry entry)
+        {
+            return;
+        }
+
+        var details = new EventDetailsForm(entry);
+        details.Show(this);
     }
 }
