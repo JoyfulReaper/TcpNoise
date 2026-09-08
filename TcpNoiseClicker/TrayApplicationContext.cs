@@ -42,6 +42,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly Channel<TcpNoisePayload?> _soundQueue;
     private readonly Task _soundTask;
 
+    private const int HistoryCapacity = 50;
+
+    private readonly List<HistoryEntry> _history = [];
+    private readonly object _historyLock = new();
+
+    private HistoryForm? _historyForm;
+
     public TrayApplicationContext()
     {
         _clickPlayer = LoadRequiredSound("click.wav");
@@ -50,6 +57,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _ipv6Player = TryLoadSound("ipv6.wav");
         _bongPlayer = TryLoadSound("bong.wav");
 
+        var historyMenuItem = new ToolStripMenuItem("Show history");
+        historyMenuItem.Click += ShowHistory;
+
         _muteMenuItem = new ToolStripMenuItem("Mute");
         _muteMenuItem.Click += ToggleMute;
 
@@ -57,6 +67,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         exitMenuItem.Click += Exit;
 
         var menu = new ContextMenuStrip();
+        menu.Items.Add(historyMenuItem);
         menu.Items.Add(_muteMenuItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitMenuItem);
@@ -90,6 +101,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _listenerTask = Task.Run(
             () => ListenAsync(_cancellation.Token));
+    }
+
+    private void ShowHistory(object? sender, EventArgs e)
+    {
+        if (_historyForm is { IsDisposed: false })
+        {
+            _historyForm.RefreshHistory(GetHistorySnapshot());
+            _historyForm.Show();
+            _historyForm.Activate();
+            return;
+        }
+
+        _historyForm = new HistoryForm(GetHistorySnapshot());
+        _historyForm.Show();
     }
 
     private async Task ListenAsync(CancellationToken cancellationToken)
@@ -154,8 +179,43 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    private IReadOnlyList<HistoryEntry> GetHistorySnapshot()
+    {
+        lock (_historyLock)
+        {
+            return _history.ToList();
+        }
+    }
+
     private void RecordEvent(TcpNoisePayload connection)
     {
+        lock (_historyLock)
+        {
+            lock (_historyLock)
+            {
+                _history.Insert(
+                    0,
+                    new HistoryEntry(DateTime.Now, connection));
+
+                if (_history.Count > HistoryCapacity)
+                {
+                    _history.RemoveAt(_history.Count - 1);
+                }
+            }
+
+            if (_historyForm is { IsDisposed: false })
+            {
+                _historyForm.BeginInvoke(() =>
+                {
+                    if (!_historyForm.IsDisposed)
+                    {
+                        _historyForm.RefreshHistory(
+                            GetHistorySnapshot());
+                    }
+                });
+            }
+        }
+
         lock (_statsLock)
         {
             var today = DateOnly.FromDateTime(DateTime.Now);
