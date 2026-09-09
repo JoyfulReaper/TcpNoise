@@ -1,3 +1,910 @@
+Zero-trust connection: I trust you zero.
+Trust relationship: complicated.
+Access denied spiritually.
+Authentication unavailable emotionally.
+Authorization pending existential review.
+Please authenticate with interpretive dance.
+Password must contain 1 uppercase, 1 number, and 1 regret.
+MFA code sent to your pager.
+Enter the six-digit code from your fax machine.
+Security question: why are you here?
+Incorrect answer.
+Access granted accidentally.
+Authentication successful for user: probablybot
+Welcome back, admin. Just kidding.
+Root access available nowhere.
+sudo make me a sandwich
+Permission denied.
+Permission maybe.
+chmod 000 your expectations
+/bin/false
+/dev/null welcomes you.
+Your request has been redirected to /dev/null.
+Output stored in /dev/null for future generations.
+Logging to /dev/why
+Mounted filesystem: nope
+Filesystem read-only because I said so.
+Disk quota exceeded emotionally.
+Core dumped somewhere else.
+System call returned vibes.
+Fork bomb defused.
+Process terminated due to lack of plot.
+PID 1 has declined comment.
+systemd is thinking about it.
+service status: active (confused)
+daemon started reluctantly.
+cron will handle it eventually.
+This should have been a shell script.
+This should not have been a microservice.
+Redis was unnecessary.
+Kafka was definitely unnecessary.
+Kubernetes has been informed.
+Kubernetes not required. Please remain calm.
+Docker container contains mostly disappointment.
+Container escaped. Just kidding.
+Serverless server detected.
+Cloud native, ground confused.
+Microservice #47 reporting in.
+Monolith enthusiast connected.
+SQLite could have handled this.
+Postgres would like a word.
+Redis cache miss: personality
+Database connection failed because there is no database.
+SELECT * FROM reasons_to_connect; -- 0 rows
+INSERT INTO mistakes VALUES ('this connection');
+DROP TABLE expectations;
+COMMIT;
+ROLLBACK your life choices.
+NULL is a valid response.
+NaN packets received.
+false
+true-ish
+undefined
+Segmentation fault in user expectations
+Syntax error near 'why'
+Compile error: insufficient coffee
+Build succeeded with 427 warnings.
+Test suite: ¯\\_(ツ)_/¯
+Unit tests passed locally.
+Production differs somehow.
+Hotfix Friday enabled.
+Deploying directly to production.
+What could possibly go wrong?
+Narrator: something went wrong.
+Temporary workaround since 2014.
+TODO: replace this banner.
+FIXME: why is this public?
+HACK: pretend service exists
+XXX: scanner interaction here
+TODO: stop adding banners
+TODO: this is getting out of hand
+TODO count exceeded safe limits.
+Feature request denied.
+Feature request accidentally implemented.
+Scope expanded successfully.
+MVP now includes a TCP port somehow.
+Weekend project status: month three.
+One quick experiment became infrastructure.
+This was supposed to be simple.
+Famous last words: "just one more port."
+I can stop adding services whenever I want.
+The server demanded another daemon.
+The VPS has developed opinions.
+The machine is learning. Not AI. Just resentment.
+Do not feed after midnight.
+Do not expose to direct sunlight.
+Server may become hostile if rebooted unexpectedly.
+The server remembers.
+It knows what you scanned last summer.
+You wake the port.
+The socket stirs.
+Something answered.
+Something is listening.
+You shouldn't have connected.
+Too late now.
+The connection has already begun.
+You have entered the TCP zone.
+Beyond this point: networking.
+Welcome to the packet dimension.
+The packets are coming from inside the house.
+Don't look behind the firewall.
+The call is coming from port 23.
+There is another packet in the room with you.
+It followed you here.
+We have been trying to reach you about your server's extended warranty.
+Your TCP warranty has expired.
+Congratulations, you've won one free packet!
+You are our 1,000,000th scanner!
+CLAIM YOUR FREE SYN NOW
+Click here to win nothing.
+You won't believe what this port does next.
+Doctors hate this one weird socket.
+Local scanners are shocked by this TCP trick.
+One simple trick to establish a connection.
+Number 7 will surprise you.
+This scanner connected. What happened next was unbelievable.
+Hot packets in your area.
+Single sockets near you want to connect.
+Congratulations, you've been selected for a survey.
+How satisfied are you with this TCP connection?
+Would you recommend this port to a friend?
+Rate your experience from 1 to 5 SYNs.
+Your feedback helps us ignore you better.
+Customer satisfaction: unavailable.
+Please stay on the line for a brief survey.
+Press any packet to continue.
+Insert packet to begin.
+Loading...
+Still loading...
+Almost there...
+Nope.
+Please wait.
+Please continue waiting.
+The waiting is the service.
+Estimated completion: heat death of universe.
+Buffering TCP...
+Downloading more RAM...
+Reticulating splines...
+Compiling Internet...
+Recalculating route...
+Connecting to upstream potato...
+Calibrating packets...
+Warming up socket...
+Defragmenting vibes...
+Optimizing nonsense...
+Contacting management...
+Management unavailable.
+Escalating to nobody.
+Waiting for DNS to become someone else's problem.
+It was DNS.
+It's always DNS.
+It wasn't DNS this time. Suspicious.
+Check the firewall.
+Check the cable.
+Check layer 8.
+Layer 8 problem detected.
+PEBKAC, but for networks.
+Works over localhost.
+Ping succeeds. Therefore everything is fine.
+Have you tried telnetting to it?
+nc says hi.
+netcat appreciates your business.
+Socket created successfully. Achievement complete.
+Listening intensifies.
+Accept() has accepted your fate.
+recv() awaits your wisdom.
+send() regrets everything.
+close() is inevitable.
+FIN is coming.
+RST happens.
+Keepalive emotionally disabled.
+Connection state: ESTABLISHED-ish
+Connection state: regret
+TTL remaining: enough
+MTU: probably fine
+Checksum vibes: positive
+Packet inspected by trained professionals.
+Packet inspected by an unpaid daemon.
+Packet inspected by Dave.
+Dave says hello.
+Dave is not here right now.
+The sysadmin has stepped away.
+The sysadmin saw you connect and sighed.
+Someone's Grafana dashboard just moved.
+A metric increased because of you.
+You made a graph wiggle.
+You are now represented by one pixel on a dashboard.
+A counter incremented. Congratulations.
+Prometheus knows.
+Grafana is judging you.
+Alertmanager declined to alert.
+PagerDuty says this isn't worth waking anyone up.
+NOC status: amused
+SOC status: mildly interested
+CEO status: unaware
+Intern status: responsible somehow
+Nobody is getting paged for this.
+This incident does not meet severity criteria.
+Severity: lol
+Priority: somewhere below coffee
+Ticket automatically closed due to vibes.
+This event will be retained longer than necessary.
+Data retention: until disk fills
+Backup status: let's not discuss it
+Restore test scheduled for never
+Redundancy provided by optimism
+High availability through denial
+Fault tolerant unless fault occurs
+99.999% aspirational uptime
+SLA backed by absolutely nothing
+Carrier-grade-ish
+Telco-grade sarcasm
+Five nines of attitude
+Packet loss included at no extra charge
+Latency handcrafted for each customer
+Jitter as a service
+QoS: Questionable over Service
+Best-effort effort
+No guarantees. Plenty of TCP.
+Connection may terminate without notice.
+This socket reserves the right to refuse service.
+Management reserves the right to laugh.
+No refunds.
+No exchanges.
+All connections final.
+Void if routed.
+Not valid in all autonomous systems.
+Offer expires at FIN.
+Limited time connection.
+While supplies last.
+One connection per household.
+Employees of ScopeCreep not eligible.
+Taxes and fees may apply.
+Shipping not available.
+Some assembly required.
+Batteries not included.
+TCP stack sold separately.
+IPv6 adapter optional.
+Requires Internet connection.
+Internet connection detected. Great start.
+Minimum system requirements: a packet
+Recommended system requirements: stop scanning
+Compatible with most operating systems that regret this.
+Made for Windows 95
+Works best in Netscape Navigator
+Optimized for 800x600 TCP
+Y2K compliant.
+Ready for the information superhighway.
+Welcome to cyberspace.
+Surf's up.
+You've got TCP.
+AOL keyword: SOCKET
+Please insert Disk 2.
+Loading from floppy...
+56k modem users welcome.
+BBS node busy. Try again later.
+ATDT555-TCP
+NO CARRIER
+CONNECT 9600
+CONNECT 115200
+RING
+BUSY
+OK
+ERROR
++++ATH0
+Modem noises omitted for bandwidth.
+Welcome to Node 1.
+SYSOP is watching.
+Time remaining today: 4 minutes.
+Download ratio enforcement disabled.
+Door games unavailable.
+ANSI graphics sold separately.
+You have 0 new messages.
+You have 1 new packet.
+Last caller: probably you.
+Guest account enabled. Bad idea.
+MOTD: stop scanning ports.
+Welcome to the world's smallest BBS.
+This message sponsored by TCP.
+Now broadcasting live from a VPS somewhere.
+You're listening to 101.1 TCP FM.
+All packets, all the time.
+Today's traffic brought to you by bots.
+And now, back to our regularly scheduled scanning.
+This hour's top hit: port 23.
+Coming up next: another SYN.
+You're caller number 0.
+Request line is open.
+DJ Socket on the ones and zeroes.
+Traffic and weather together on the 8s.
+Today's forecast: scattered SYNs.
+Chance of botnets: 80%.
+Heavy scanning expected overnight.
+Packet storm warning in effect.
+Current conditions: TCP with occasional UDP.
+Visibility: poor behind NAT.
+Humidity: irrelevant.
+Barometric pressure: also irrelevant.
+Network pressure: rising.
+Winds from port 23 at 40 packets per minute.
+This concludes the Internet weather report.
+Please stand by for more nonsense.
+We now return you to your regularly scheduled botnet.
+And that's the news.
+No humans were harmed in the making of this connection.
+One bot was mildly inconvenienced.
+This message will self-destruct at FIN.
+Your mission, should you choose to accept it: send bytes.
+The port will deny all knowledge of your activities.
+Good luck, scanner.
+May the packets be with you.
+Live long and packet.
+Resistance is futile. You will be logged.
+I'm sorry Dave, I'm afraid I can't proxy that.
+Open the pod bay port, HAL.
+These are not the ports you're looking for.
+One does not simply scan into Mordor.
+The socket abides.
+You shall not PASS.
+Why is the packet gone?
+I see your SYN is as big as mine.
+Surely you can't be serious.
+I am serious. And don't call me TCP.
+It's dangerous to go alone. Take this ACK.
+A wild scanner appeared!
+Scanner used CONNECT!
+It's not very effective.
+Critical hit: connection accepted.
+Roll for initiative.
+You rolled a natural 1.
+Quest updated: Find Something Useful
+New objective: go away
+Autosaving...
+Checkpoint reached.
+You have entered a safe zone. Probably.
+Respawn unavailable.
+Game over. Insert packet.
+Press SYN to start.
+Player 2 connected.
+Multiplayer unavailable.
+Server full: 0/0 players
+Ping: yes
+Skill issue.
+Network diff.
+Git gud.
+Patch notes: port remains open.
+Version 1.0.0: socket
+Version 1.0.1: still socket
+Known issue: scanners
+Changelog: added sarcasm
+Breaking change: nothing works
+Deprecated: your expectations
+End-of-life date: eventually
+Support window closed.
+Legacy mode enabled.
+Compatibility mode: 1997
+Beta quality service
+Alpha quality decisions
+Pre-alpha production deployment
+Experimental. Obviously.
+Stable enough for strangers.
+Production-ready according to nobody.
+Do not use in production. This is production.
+Prototype accidentally deployed.
+Temporary server since Tuesday.
+TODO became architecture.
+Proof of concept became permanent.
+Hack became dependency.
+Dependency became lifestyle.
+Nobody remembers why this port exists.
+Port owner unknown.
+Service undocumented.
+Documentation pending.
+README says TODO.
+Runbook missing.
+Bus factor: one tired person.
+Architecture diagram unavailable because it changed again.
+Configuration drift detected: yes
+Expected state: who knows
+Desired state: vibes
+Actual state: this
+Infrastructure as Code-ish
+Infrastructure as Regret
+Infrastructure as Comedy
+TCP as a Service
+Socket as a Service
+Sarcasm as a Service
+Nothing as a Service
+Garbage In, Banner Out
+Powered by unsolicited traffic
+Fueled by bots
+Built for absolutely no customer
+Zero users, infinite scalability
+Designed to handle dozens of requests per decade
+Scales horizontally if you buy more nonsense
+Load balanced by fate
+Failover provided by retrying
+Cluster size: one
+Distributed system: same problem on two servers
+Globally distributed disappointment
+Multi-region because why not
+Edge computing, except this is the edge
+Welcome to the edge. Please don't fall off.
+Edge location: somewhere inconvenient
+Nearest region: shrug
+CDN cache status: MISS, emotionally
+Cloud provider: someone with a credit card
+Hosted with confidence.
+Hosted without adult supervision.
+Datacenter certified to contain servers.
+Rack position: probably vertical
+Cooling status: fans
+Power source: electricity
+Backup power: optimism
+Physical security: building
+Remote hands: hopefully
+Network uplink: Internet-shaped
+Transit provider: yes
+BGP is happening somewhere above my pay grade.
+Route accepted. Life choices rejected.
+AS path: too long to explain
+Peering dispute not included.
+Packets routed by capitalism.
+Your packet crossed several expensive routers to see this message.
+Think of the infrastructure required to deliver this nonsense.
+This banner consumed more resources than it deserved.
+Congratulations on successfully wasting electrons.
+Several electrons died to bring you this message.
+Carbon-neutral sarcasm pending verification.
+This connection probably heated the planet by 0.000000001°C.
+Please recycle your packets.
+Reduce. Reuse. Retransmit.
+TCP: because sometimes once isn't enough.
+Retransmission builds character.
+Packet lost. Just kidding, you got this.
+Sequence number appreciated.
+Window size noted.
+Congestion control says calm down.
+Slow start, fast disappointment.
+Nagle has entered the chat.
+Delayed ACK intensifies.
+TIME_WAIT welcomes you later.
+FIN_WAIT emotionally.
+CLOSE_WAIT forever.
+RST: the universal goodbye.
+Socket closed for renovations.
+Come again never.
+Thanks for stopping by.
+Have a nice scan.
+Drive safely.
+Watch your step on the way out.
+Please take your packets with you.
+Don't forget your SYN.
+Tell your friends. Actually don't.
+Five stars appreciated.
+Follow us nowhere.
+Subscribe to nothing.
+Like and smash that ACK button.
+Thanks for watching.
+End transmission.
+EOF
+FIN
+goodbye
+bye
+later
+peace
+kthxbye
+connection will now pretend this never happened
+Congratulations! You found a TCP port.
+You found an open port. Please contain your excitement.
+TCP says hello.
+Well, this is awkward.
+Yep. It's open.
+Connection accepted. Regret pending.
+You connected. Nobody knows why.
+This port has been expecting you.
+Welcome, mysterious Internet stranger.
+Hello, scanner.
+Oh good, another one.
+You again?
+Please stop touching the ports.
+Do not tap the glass.
+The port is open. The mystery remains.
+Connection successful. Purpose unclear.
+Achievement unlocked: TCP Handshake
+Achievement unlocked: Found Something Listening
+Achievement unlocked: Internet Archaeologist
+Achievement unlocked: Port Enthusiast
+Achievement unlocked: Three-Way Handshake
+Achievement unlocked: Questionable Curiosity
+Achievement unlocked: Probably Automated
+TCP handshake complete. Your certificate is in the mail.
+Congratulations. SYN acknowledged.
+SYN received. ACKnowledgment granted.
+Your SYN has been reviewed and approved.
+Thank you for your SYNmission.
+SYNcerely yours, this port.
+ACK!
+ACK ACK ACK
+SYN? In this economy?
+Please hold while we process your packet.
+Your connection is important to us.
+All operators are currently assisting other scanners.
+Estimated wait time: forever.
+Press 1 for nothing. Press 2 for less.
+For quality assurance, this connection may be ignored.
+Thank you for calling TCP Support.
+Your call cannot be completed as dialed.
+Please listen carefully, as our ports have recently changed.
+Welcome to the automated port response system.
+Your connection has been placed in a queue of one.
+This interaction may be monitored for comedy purposes.
+Hello and welcome to absolutely nothing.
+There is no service here. Only vibes.
+No application detected. Please enjoy the socket.
+You have reached a decorative TCP listener.
+This port is for ornamental purposes only.
+This is not the service you are looking for.
+Nothing to see here.
+Move along.
+Please disperse.
+Everything is fine.
+There is definitely not a honeypot here.
+Totally normal server.
+Extremely legitimate enterprise infrastructure.
+Production system. Do not investigate further.
+Mission critical socket.
+Enterprise-grade TCP endpoint.
+Cloud-native socket technology.
+AI-powered TCP listener.
+Blockchain-enabled TCP socket.
+Web3-ready port.
+Powered by synergy.
+Leveraging best-in-class TCP solutions.
+Digitally transforming SYN packets since 2026.
+Scalable. Agile. Open.
+Now with 30% more TCP.
+Enterprise Edition
+Community Edition
+Professional Ultimate Enterprise Plus
+Licensed for non-commercial scanning only.
+Free trial expired.
+Please insert license key.
+Subscription required to continue.
+This feature requires TCP Premium.
+Upgrade to Port Pro for additional bytes.
+You have 0 free connections remaining.
+Thank you for evaluating TCP Server 2026.
+Unregistered evaluation copy.
+Shareware version.
+Nag screen successfully displayed.
+Please register this socket.
+Powered by a computer.
+Running on electricity.
+Hosted somewhere.
+Server located approximately on Earth.
+100% artisanal TCP.
+Locally sourced packets.
+Organic, non-GMO sockets.
+Cruelty-free networking.
+Gluten-free TCP.
+Vegan packets only.
+Farm-to-table Ethernet.
+Handcrafted SYN/ACK responses.
+Small-batch TCP.
+Single-origin packets.
+Fair-trade sockets.
+This TCP connection contains no artificial flavors.
+May contain traces of IPv6.
+Processed in a facility that also handles UDP.
+Warning: contents may be hot.
+Warning: connection may contain sarcasm.
+Warning: do not operate heavy machinery while connected.
+Warning: port may bite.
+Caution: TCP crossing.
+Caution: packets in roadway.
+High voltage. Low usefulness.
+Hazard: networking.
+Danger: open socket.
+Abandon all hope, ye who connect here.
+Here be packets.
+Here be dragons.
+Here be NAT.
+Beware the TCP.
+Beware of dog. Dog not found.
+Authorized scanners only.
+Employees must wash hands before scanning.
+No shirt, no shoes, no packets.
+No solicitation.
+No loitering on this port.
+Maximum occupancy: 1 bot.
+Fire exit. Do not block.
+Emergency exit only. Alarm will sound.
+Please knock before entering.
+Did you knock?
+Who is it?
+Come back with a warrant.
+Wrong house.
+Wrong server.
+Wrong port. Probably.
+You're early.
+You're late.
+The meeting was yesterday.
+Nobody told me you were coming.
+I wasn't expecting company.
+Make yourself at home. Don't.
+Can I help you?
+What do you want?
+State your business.
+Identify yourself, stranger.
+Password?
+Speak friend and enter.
+You first.
+Send something interesting.
+Say something.
+Go on. I'm listening.
+Tell me more.
+Fascinating. Continue.
+And then what happened?
+Please elaborate.
+I have questions.
+Your move.
+Ball's in your court.
+Well?
+...
+Hello?
+Is anyone there?
+Can you hear me now?
+Testing, testing, 1, 2, TCP.
+Mic check.
+Is this thing on?
+Connection check successful.
+Diagnostic complete: yep, port.
+System test passed: stranger connected.
+Congratulations, networking occurred.
+A packet has happened.
+An Internet event has occurred.
+The Internet has noticed you.
+The Internet sends its regards.
+Welcome to the Internet. Please wipe your feet.
+You have reached the edge of the Internet.
+End of Internet. Turn around.
+Internet closed for maintenance.
+Internet machine warming up.
+Internet currently experiencing Internet.
+Please reboot the Internet and try again.
+Have you tried turning the Internet off and on again?
+Works on my network.
+Unable to reproduce.
+Cannot reproduce issue. Closing ticket.
+Marked as working as designed.
+Status: probably fine.
+Status: weird.
+Status: concerning.
+Status: technically online.
+Status: don't ask.
+Status: vibes-based.
+Operational-ish.
+Nominal enough.
+Everything is operating within expected levels of nonsense.
+No incidents reported in the last 0 minutes.
+Days since last scanner: 0
+Days since last weird packet: 0
+Days since last mistake: 0
+Uptime: yes
+CPU: probably
+RAM: present
+Disk: increasingly full
+Network: unfortunately
+Service health: shrug
+Monitoring: watching you specifically
+Telemetry enabled: your SYN was very informative
+This connection has been logged in an extremely dramatic database.
+Congratulations, you are now a statistic.
+You have contributed to today's graph.
+Thank you for participating in Internet research.
+Your packet will be used for scientific purposes.
+For science.
+SCIENCE HAS OCCURRED
+Research subject connected successfully.
+Specimen detected.
+Observation started.
+Interesting behavior noted.
+Behavior classified as: scanner probably
+Bot detected. Maybe.
+Human detected. This seems unlikely.
+Unknown lifeform connected.
+Signal acquired.
+Contact!
+We have contact.
+First contact protocol initiated.
+Greetings, machine.
+Take me to your operator.
+Are you a robot?
+Prove you're not a toaster.
+Please complete the CAPTCHA: what is love?
+CAPTCHA failed successfully.
+Click all squares containing TCP.
+I am not a robot checkbox unavailable.
+Robot access encouraged.
+Bots welcome. Humans tolerated.
+This service was designed by humans. Allegedly.
+Your bot is doing great.
+Good bot.
+Bad bot.
+Mediocre bot.
+Bot performance review: needs improvement.
+Please tell your operator you found me.
+Tell your botnet owner I said hi.
+If you're reading this manually, hello.
+If you're a scanner, beep twice.
+Beep.
+Boop.
+BEEP BOOP TCP
+01010100 01000011 01010000
+01101000 01101001
+Binary joke loading...
+Segmentation fault (just kidding)
+Kernel panic postponed.
+NULL pointer enthusiast detected.
+Buffer overflow not included.
+Stack smashing detected: probably not.
+Undefined behavior zone.
+malloc() feelings hurt.
+errno = EWHY
+errno = ENOCLUE
+errno = EGOAWAY
+errno = ETOOMANYBOTS
+errno = ENOTIMPRESSED
+HTTP/1.1 418 Wrong Protocol, Genius
+200 OK-ish
+404 Service Not Found
+403 Curiosity Forbidden
+451 Unavailable For Extremely Stupid Reasons
+500 Internal Existential Crisis
+502 Bad Life Choices
+503 Motivation Unavailable
+504 Scanner Timeout
+418 I'm still a teapot
+301 Moved Somewhere Else
+307 Temporary Confusion
+429 Too Many You
+999 Made-Up Status
+Protocol negotiation failed due to personality conflict.
+Unsupported protocol: whatever you're doing.
+Expected protocol: good question.
+Please consult RFC 8675309.
+RFC compliance: emotionally
+Standards compliant where convenient.
+RFC says no.
+RFC says maybe.
+The RFC is left as an exercise for the reader.
+I read the RFC so you don't have to.
+Nobody reads the RFC.
+According to ancient Internet law, you owe me a packet.
+Per RFC 1149, please attach carrier pigeon.
+IP over Avian Carriers currently unavailable.
+Coffee pot not responding.
+HTTP 418 remains undefeated.
+This service proudly supports RFC 2549 in theory.
+Ask your network administrator about IPv5.
+IPv5 support coming soon.
+IPv7 beta now open.
+IPv4 exhaustion solved: stop scanning me.
+IPv6 detected. Fancy.
+IPv6: same nonsense, more address.
+Now accepting 128-bit strangers.
+NAT cannot save you here.
+CGNAT sends its regards.
+Your source port is adorable.
+Nice ephemeral port.
+Cool IP address.
+I've seen better IP addresses.
+IP address accepted conditionally.
+Your packet smells funny.
+Packet inspected. Very packet-like.
+Packet quality: acceptable.
+Fresh packet received.
+Packet expired.
+Packet contains 100% packet.
+Do not fold, spindle, or mutilate packet.
+Contents under pressure.
+Open socket slowly.
+This end up.
+Fragile: handle with TCP.
+Return to sender.
+Undeliverable as addressed.
+Postage due.
+Insufficient postage.
+Please affix additional SYNs.
+Certified TCP
+Priority Packet
+First-Class Connection
+Parcel accepted.
+Your packet has been delivered to absolutely nowhere.
+Thank you for choosing ScopeCreep Networking.
+ScopeCreep welcomes your unnecessary connection.
+ScopeCreep: now with more open ports.
+ScopeCreep Industries
+ScopeCreep Internet Services
+ScopeCreep Global Telecommunications
+ScopeCreep Department of Unexpected Connections
+ScopeCreep Network Operations Center
+ScopeCreep Research Division
+ScopeCreep Labs
+ScopeCreep Experimental Socket #42
+ScopeCreep accidentally became infrastructure.
+ScopeCreep was supposed to do one thing.
+This was not in the original scope.
+Feature creep detected.
+Another service has appeared.
+Nobody approved this architecture.
+This server has acquired responsibilities.
+Please submit a change request before connecting.
+Change Advisory Board approval required.
+Ticket number?
+Your request has been assigned severity P7.
+SLA: eventually
+Incident commander asleep.
+Escalation path unavailable.
+Please open a Jira ticket.
+Closing as duplicate.
+Won't fix.
+Works as intended.
+Need more information.
+Repro steps unclear.
+Assigned to networking.
+Networking assigned it back.
+Awaiting vendor response.
+Pending management approval.
+Blocked by stakeholder alignment.
+Synergy unavailable.
+Please circle back next quarter.
+Let's take this offline.
+Per my last packet...
+Kindly do the needful.
+Please advise.
+Warm regards, TCP
+Best, Socket
+Sent from my server
+Sent from my iPort
+Confidentiality notice: lol
+This transmission may contain packets.
+Any resemblance to a real service is coincidental.
+No warranty expressed or implied.
+Use at your own risk.
+Void where prohibited.
+Terms and conditions apply.
+By connecting, you agree to nothing in particular.
+By continuing, you acknowledge that TCP happened.
+Cookies unavailable. Have a SYN instead.
+Privacy policy: I saw your IP because TCP works that way.
+This server does not sell your data because nobody wants it.
+GDPR-compliant sarcasm.
+Your preferences have been ignored.
+Consent banner successfully avoided.
+Accept all packets? [Y/n]
+Terms updated. Nobody read them.
+Legal has advised us to say hello.
+Our lawyers asked us not to explain this port.
+This socket is provided for entertainment purposes only.
+Not intended for medical use.
+Do not use this socket to operate nuclear facilities.
+Consult your doctor before using TCP.
+Side effects may include connectivity.
+Ask your doctor if TCP is right for you.
+May cause packet loss.
+Stop use if networking persists for more than four hours.
+Keep out of reach of children and IoT devices.
+IoT device detected. I'm sorry.
+Smart toaster support unavailable.
+Your camera's default password disappoints me.
+Please change admin/admin.
+admin/admin has entered the chat.
+root/root would like to know your location.
+Password123 has left the building.
+Security through obscurity intensifies.
+Firewall says hello.
+Firewall forgot to close this one.
+Security team notified. Security team is me.
+SOC alert generated: someone connected.
+Threat level: mildly amusing.
+Threat level: beige.
+DEFCON TCP
+Incident detected: Internet exists.
+Cybersecurity has occurred.
+Cyber.
+Very secure. Much enterprise.
+Congratulations, you found an open TCP port.
+Congratulations! This TCP port was left here just for you.
+You found a TCP port. There is no prize.
+TCP port found. Achievement unlocked.
+Congratulations! You connected to absolutely nothing useful.
+Welcome, scanner. You have discovered a TCP port.
+You found me. Now what?
+This is a TCP port. Please act surprised.
+Congratulations! Your scanner works.
+TCP connection successful. Life-changing stuff.
 ALERT: IP ADDED TO FAFO QUEUE
 ALERT: IP ADDED TO DDOS QUEUE
 ALERT: IP ADDED TO PENTEST QUEUE
