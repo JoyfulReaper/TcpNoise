@@ -215,7 +215,7 @@ pkg-config --cflags --libs libnats
 pkg-config --cflags --libs sqlite3
 ```
 
-Then, from the `07-tcpnoise` directory:
+Then, from the repository root:
 
 ```sh
 make
@@ -675,7 +675,7 @@ Change the URL for another environment.
 
 ### Build and run
 
-From `07-tcpnoise`:
+From the repository root:
 
 ```powershell
 dotnet restore .\TcpNoiseClicker\TcpNoiseClicker.csproj
@@ -854,7 +854,7 @@ Accepted clients are currently handled synchronously with a short receive timeou
 ## Source layout
 
 ```text
-07-tcpnoise/
+.
 ├── Makefile
 ├── README.md
 ├── plan.md
