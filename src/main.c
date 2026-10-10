@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <string.h>
 
 #define NATS_SERVER "nats://10.99.0.1:4222"
@@ -67,9 +68,12 @@ enum connection_result
 	CONNECTION_FATAL
 };
 
+
 void print_usage(char *program)
 {
-	fprintf(stderr, "Usage: %s <port> [port ...]\n", program);
+    fprintf(stderr,
+        "Usage: %s [--bind IPv4-or-IPv6-address] <port> [port ...]\n",
+        program);
 }
 
 bool uint16_exists(const uint16_t *arr, size_t size, uint16_t target)
@@ -85,41 +89,65 @@ bool uint16_exists(const uint16_t *arr, size_t size, uint16_t target)
 }
 
 bool process_arguments(
-	int argc,
-	char *argv[],
-	uint16_t *ports,
-	size_t *port_count)
+    int argc,
+    char *argv[],
+    uint16_t *ports,
+    size_t *port_count,
+    const char **bind_address,
+    int *bind_family)
 {
-	if(argc < 2 || argc - 1 > MAX_PORT)
-	{
-		return false;
-	}
+    int first_port = 1;
 
-	for(int i = 1; i < argc; i++)
-	{
-		char *end;
-		long value = strtol(argv[i], &end, 10);
+    *bind_address = NULL;
+    *bind_family = AF_UNSPEC;
 
-		if(end == argv[i] || *end != '\0')
-		{
-			return false;
-		}
+    if (argc >= 2 && strcmp(argv[1], "--bind") == 0)
+    {
+        if (argc < 4)
+            return false;
 
-		if(value < 1 || value > 65535)
-		{
-			return false;
-		}
+        *bind_address = argv[2];
+        first_port = 3;
 
-		uint16_t parsed_port = (uint16_t)value;
+        struct in_addr ipv4;
+        struct in6_addr ipv6;
 
-		if(!uint16_exists(ports, *port_count, parsed_port))
-		{
-			ports[*port_count] = parsed_port;
-			(*port_count)++;
-		}
-	}
+        if (inet_pton(AF_INET, *bind_address, &ipv4) == 1)
+            *bind_family = AF_INET;
+        else if (inet_pton(AF_INET6, *bind_address, &ipv6) == 1)
+            *bind_family = AF_INET6;
+        else
+            return false;
+    }
 
-	return true;
+    if (argc <= first_port || argc - first_port > MAX_PORT)
+        return false;
+
+    for (int i = first_port; i < argc; i++)
+    {
+        char *end;
+        errno = 0;
+        long value = strtol(argv[i], &end, 10);
+
+        if (errno == ERANGE ||
+            end == argv[i] ||
+            *end != '\0' ||
+            value < 1 ||
+            value > 65535)
+        {
+            return false;
+        }
+
+        uint16_t parsed_port = (uint16_t)value;
+
+        if (!uint16_exists(ports, *port_count, parsed_port))
+        {
+            ports[*port_count] = parsed_port;
+            (*port_count)++;
+        }
+    }
+
+    return true;
 }
 
 void close_listeners(struct listener listeners[], size_t listener_count)
@@ -425,6 +453,9 @@ int main (int argc, char *argv[])
 	uint16_t ports[MAX_PORT];
 	size_t port_count = 0;
 	
+        const char *bind_address = NULL;
+        int bind_family = AF_UNSPEC;
+
 	struct listener listeners[MAX_LISTENERS];
 	size_t listener_count = 0;
 	
@@ -438,12 +469,22 @@ int main (int argc, char *argv[])
 	int families[] = { AF_INET, AF_INET6 };
 	size_t family_count = sizeof families / sizeof families[0];
 	
-	if(!process_arguments(argc, argv, ports, &port_count))
+        if(!process_arguments(
+            argc, argv, ports, &port_count,
+            &bind_address, &bind_family))
 	{
 		print_usage(argv[0]);
 		return EXIT_FAILURE;
 	}
 	
+        // Restrict listeners to the requested address family.
+	// Without --bind, retain the original IPv4 + IPv6 behavior.
+	if (bind_family != AF_UNSPEC)
+	{
+		families[0] = bind_family;
+		family_count = 1;
+	}
+
 	// Sensor Name
 	const char *sensor_override = getenv("TCPNOISE_SENSOR");
 	char sensor_name[MAX_SENSOR_NAME];
@@ -534,7 +575,11 @@ int main (int argc, char *argv[])
 				return EXIT_FAILURE;
 			}
 			
-			if(!bind_socket(listeners[listener_index].fd, listeners[listener_index].port, listeners[listener_index].family))
+			if(!bind_socket(
+				listeners[listener_index].fd,
+				listeners[listener_index].port,
+				listeners[listener_index].family,
+				bind_address))
 			{
 				close_log_files(log_files, port_count);
 				close(listeners[listener_index].fd);

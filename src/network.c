@@ -11,6 +11,7 @@
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define LISTEN_BACKLOG 64
 
@@ -88,45 +89,60 @@ int create_socket(int family)
 	return sfd;
 }
 
-bool bind_socket(int sfd, uint16_t port, int family)
-{	
-	if(family == AF_INET)
-	{
-		struct sockaddr_in address;
-		memset(&address, 0, sizeof address);
-		address.sin_family = AF_INET;
-		address.sin_addr.s_addr = INADDR_ANY;
-		address.sin_port = htons(port);
-		
-		if(bind(sfd, (struct sockaddr*)&address, sizeof address) != 0)
-		{
-			perror("bind");
-			return false;
-		} 
-	}
-	else if (family == AF_INET6)
-	{
-		struct sockaddr_in6 address;
-		memset(&address, 0, sizeof address);
-		address.sin6_family = AF_INET6;
-		address.sin6_addr = in6addr_any;
-		address.sin6_port = htons(port);
-		
-		if(bind(sfd, (struct sockaddr*)&address, sizeof address) != 0)
-		{
-			perror("bind");
-			return false;
-		} 
-	}
-	else
-	{
-		fprintf(stderr, "Invalid family\n");
-		return false;
-	}
-	
-	return true;
-}
+bool bind_socket(int sfd, uint16_t port, int family, const char *bind_address)
+{
+    if (family == AF_INET)
+    {
+        struct sockaddr_in address = {0};
+        address.sin_family = AF_INET;
+        address.sin_port = htons(port);
 
+        if (bind_address == NULL)
+        {
+            address.sin_addr.s_addr = htonl(INADDR_ANY);
+        }
+        else if (inet_pton(AF_INET, bind_address, &address.sin_addr) != 1)
+        {
+            fprintf(stderr, "Invalid IPv4 bind address: %s\n", bind_address);
+            return false;
+        }
+
+        if (bind(sfd, (struct sockaddr *)&address, sizeof address) != 0)
+        {
+            perror("bind IPv4");
+            return false;
+        }
+    }
+    else if (family == AF_INET6)
+    {
+        struct sockaddr_in6 address = {0};
+        address.sin6_family = AF_INET6;
+        address.sin6_port = htons(port);
+
+        if (bind_address == NULL)
+        {
+            address.sin6_addr = in6addr_any;
+        }
+        else if (inet_pton(AF_INET6, bind_address, &address.sin6_addr) != 1)
+        {
+            fprintf(stderr, "Invalid IPv6 bind address: %s\n", bind_address);
+            return false;
+        }
+
+        if (bind(sfd, (struct sockaddr *)&address, sizeof address) != 0)
+        {
+            perror("bind IPv6");
+            return false;
+        }
+    }
+    else
+    {
+        fprintf(stderr, "Invalid address family\n");
+        return false;
+    }
+
+    return true;
+}
 
 bool listen_socket(int sfd)
 {

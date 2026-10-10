@@ -21,7 +21,8 @@ int create_socket(int family);
 bool bind_socket(
     int sfd,
     uint16_t port,
-    int family);
+    int family,
+    const char *bind_address);
 
 bool listen_socket(int sfd);
 
