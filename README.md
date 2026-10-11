@@ -15,7 +15,9 @@ There is also a small Windows tray companion, **TcpNoiseClicker**, which subscri
 ### tcpnoise collector
 
 * Listen on up to 11 TCP ports at once
-* Separate IPv4 and IPv6 listeners for every configured port
+* Listen on IPv4 and IPv6
+* Optionally bind a collector to one specific numeric IPv4 or IPv6 address with `--bind`
+* Use `TCPNOISE_SENSOR` to give a collector an explicit sensor/site/network name
 * Monitor all listening sockets with `poll()`
 * Display remote IP address and source port
 * Maintain per-port connection counters while the process is running
@@ -31,6 +33,7 @@ There is also a small Windows tray companion, **TcpNoiseClicker**, which subscri
 * Optionally send randomized per-port banners
 * Record whether a banner was sent, skipped, or failed
 * Publish live connection events to NATS
+* Include sensor identity, banner information, and bounded payload data in NATS events
 * Continue collecting traffic even if NATS is unavailable
 * Graceful `SIGINT` / `SIGTERM` shutdown
 * Ignore `SIGPIPE` when clients disappear during a banner send
@@ -42,31 +45,19 @@ There is also a small Windows tray companion, **TcpNoiseClicker**, which subscri
 
 The `TcpNoiseClicker` directory contains a small .NET 10 Windows tray app that subscribes to the live NATS event stream.
 
-Current behavior:
+Current behavior includes:
 
-* Runs as a tray application with no main window
+* Runs as a tray application
 * Subscribes to `tcpnoise.connection`
 * Plays a sound for each received connection event
-* Shows today's event count plus the most recent remote IP and destination port in the tray tooltip
-* Middle-truncates long IPv6 addresses so both ends remain visible
+* Tracks received tcpnoise events
+* Shows sensor, remote endpoint, destination port, IP version, banner, payload, and seen count in the history view
 * Provides a tray-menu **Mute** option
 * Uses persistent `seenCount` data from tcpnoise to distinguish first-seen addresses
 * Uses special sounds for IPv6 and ports `420` / `42069`
 * Continues counting events while muted
 
-Current sound precedence:
-
-```text
-TCP/420 or TCP/42069  -> bong.wav
-IPv6                  -> ipv6.wav
-first-seen IPv4       -> new.wav
-port-specific mapping -> configured port sound
-everything else       -> click.wav
-```
-
-The special WAV files are optional except for `click.wav`; if an optional sound cannot be loaded, the app falls back to the normal click.
-
-At the moment the port-specific sound dictionary is present but not populated.
+The project also contains `AndroidNoiseClicker`, an Android-side NATS subscriber experiment.
 
 ## Architecture
 
@@ -90,33 +81,31 @@ random Internet scanner
         v
       NATS
         |
-        v
- TcpNoiseClicker
-        |
-        v
- click / bell / PEWWW / bong
+        +-------------------+
+        |                   |
+        v                   v
+ TcpNoiseClicker      other consumers
 ```
 
-The project has also been exercised with multiple tcpnoise collectors in different locations publishing into the same private NATS broker:
+Multiple collectors can publish to the same private NATS broker:
 
 ```text
-Internet                 Internet
-   |                         |
-   v                         v
-tcpnoise NY              tcpnoise PHX
-   |                         |
-   +-----------+-------------+
-               |
-               v
-             NATS
-               |
-        +------+------+
-        |             |
-        v             v
- TcpNoiseClicker   future consumers
+Internet / DN42 / Yggdrasil
+       |        |        |
+       v        v        v
+    sensor   sensor   sensor
+       \        |        /
+        \       |       /
+         +------v------+
+                NATS
+                 |
+          +------+------+
+          |             |
+          v             v
+   TcpNoiseClicker   future consumers
 ```
 
-NATS is being used as a live pub/sub path. The current subject is:
+The live subject is:
 
 ```text
 tcpnoise.connection
@@ -124,18 +113,41 @@ tcpnoise.connection
 
 This intentionally keeps the live clicker subject separate from the Mission Control `events.>` archive namespace for now.
 
-### Multi-sensor note
+### Multi-sensor deployments
 
-Multiple collectors can publish to the same subject today, but the current event schema does **not** yet identify which sensor produced an event.
+Each collector includes a sensor identifier in its published events.
 
-A planned small change is to include a sensor/site identifier such as:
+By default tcpnoise uses the local hostname. Override it with the `TCPNOISE_SENSOR` environment variable:
 
-```text
-ny
-phx
+```sh
+TCPNOISE_SENSOR=overlay-dn42 \
+  ./tcpnoise --bind 172.20.220.54 22 23 80 443
 ```
 
-That will make it possible to compare scanner populations, port distributions, IPv4/IPv6 activity, and repeat offenders between locations without changing the basic NATS topology.
+Example logical sensor names:
+
+```text
+clanker
+scopecreep
+noisemaker
+overlay-dn42
+overlay-ygg
+```
+
+IPv4 and IPv6 instances may intentionally use the same sensor name when they represent the same logical network/site. The event's `ipVersion` field distinguishes the address family.
+
+For example, these can both publish as `overlay-dn42`:
+
+```text
+172.20.220.54
+fdf0:e12c:5528::54
+```
+
+while a Yggdrasil listener on the same host can publish as:
+
+```text
+overlay-ygg
+```
 
 ## Building tcpnoise
 
@@ -173,7 +185,9 @@ pkg install sqlite3 pkgconf cmake
 
 If a packaged NATS C client is not available or convenient, my fork of `nats.c` can be used as a known-working source for building `libnats` on FreeBSD:
 
+```text
 https://github.com/JoyfulReaper/nats.c
+```
 
 Clone it:
 
@@ -201,7 +215,7 @@ On a working FreeBSD setup, this installed the `libnats` pkg-config metadata und
 /usr/local/lib/pkgconfig/libnats.pc
 ```
 
-Make sure `pkg-config` can see that location. FreeBSD ports/packages may also use `/usr/local/libdata/pkgconfig`, so including both is convenient:
+FreeBSD ports/packages may also use `/usr/local/libdata/pkgconfig`, so including both is convenient:
 
 ```sh
 export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/libdata/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}
@@ -220,8 +234,6 @@ Then, from the repository root:
 ```sh
 make
 ```
-
-If you use this regularly, put the `PKG_CONFIG_PATH` export in your shell startup file rather than typing it every time.
 
 ### Debian / Ubuntu
 
@@ -244,13 +256,92 @@ Clean the build with:
 make clean
 ```
 
-### Binding privileged ports on Linux
+## Usage
+
+```text
+./tcpnoise [--bind IPv4-or-IPv6-address] <port> [port ...]
+```
+
+Ports must be between `1` and `65535`.
+
+A maximum of 11 unique port arguments may currently be supplied. Duplicate ports are ignored.
+
+### Default wildcard behavior
+
+Without `--bind`, tcpnoise retains its original behavior and creates both IPv4 and IPv6 wildcard listeners for each configured port:
+
+```sh
+./tcpnoise 2222
+```
+
+Example output:
+
+```text
+Listening for noise on port: 2222 (IPv4)
+Listening for noise on port: 2222 (IPv6)
+```
+
+Monitor several ports at once:
+
+```sh
+./tcpnoise 21 23 80 443 2222 2323 3389 5432 8080 420 42069
+```
+
+### Binding to one address
+
+Use `--bind` when a host has several networks or addresses and tcpnoise should listen only on one of them.
+
+IPv4 example:
+
+```sh
+TCPNOISE_SENSOR=overlay-dn42 \
+  ./tcpnoise --bind 172.20.220.54 21 22 23 25 80 443 445 3389 5900 8080 8443
+```
+
+IPv6 example:
+
+```sh
+TCPNOISE_SENSOR=overlay-dn42 \
+  ./tcpnoise --bind fdf0:e12c:5528::54 21 22 23 25 80 443 445 3389 5900 8080 8443
+```
+
+Yggdrasil example:
+
+```sh
+TCPNOISE_SENSOR=overlay-ygg \
+  ./tcpnoise --bind 203:b4fc:fbe5:6a84:238d:69a1:dcbf:ed54 \
+  21 22 23 25 80 443 445 3389 5900 8080 8443
+```
+
+`--bind` currently accepts a numeric IPv4 or IPv6 address.
+
+When `--bind` is present:
+
+* tcpnoise determines the address family from the supplied address
+* only that address family is created
+* the listener is bound only to the requested address
+* an unavailable/non-local address causes the bind to fail
+* tcpnoise does not silently fall back to a wildcard listener
+
+This makes it suitable for network-specific sensors on multi-homed systems.
+
+### Verifying a bind
+
+On Linux:
+
+```sh
+sudo ss -lntp | grep tcpnoise
+```
+
+A correctly bound sensor should show the requested local address rather than `0.0.0.0` or `[::]`.
+
+## Binding privileged ports on Linux
 
 Ports below 1024 normally require elevated privileges.
 
-For a long-running Linux deployment, avoid running the entire collector as root just so it can bind ports such as 21, 23, 80, 443, or 420.
+Avoid running the entire collector as root just so it can bind ports such as 21, 22, 23, 25, 80, or 443.
 
-One option is to grant only the bind capability to the built binary:
+For a manually launched binary, one option is:
 
 ```sh
 sudo setcap cap_net_bind_service=+ep ./tcpnoise
@@ -263,36 +354,157 @@ Expected output looks like:
 ./tcpnoise cap_net_bind_service=ep
 ```
 
-Remember that replacing/rebuilding the executable may require applying the capability again.
+Replacing/rebuilding the executable may require applying the file capability again.
 
-## Usage
+For systemd deployments, granting the capability through the service unit is usually cleaner.
 
-```text
-./tcpnoise <port> [port ...]
-```
+## Linux systemd deployment
 
-For example:
+A reusable systemd template works well for running multiple independent tcpnoise instances on the same Linux host.
 
-```sh
-./tcpnoise 2222
-```
+The following deployment pattern was tested with separate DN42 IPv4, DN42 IPv6, and Yggdrasil IPv6 instances.
 
-Or monitor several ports at once:
-
-```sh
-./tcpnoise 21 23 80 443 2222 2323 3389 5432 8080 420 42069
-```
-
-For every configured port, tcpnoise creates both an IPv4 and IPv6 listener:
+Create:
 
 ```text
-Listening for noise on port: 2222 (IPv4)
-Listening for noise on port: 2222 (IPv6)
+/etc/systemd/system/tcpnoise@.service
 ```
 
-Ports must be between `1` and `65535`.
+Example:
 
-A maximum of 11 unique port arguments may currently be supplied. Duplicate ports are ignored.
+```ini
+[Unit]
+Description=TCPNoise sensor (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=joyfulreaper
+Group=joyfulreaper
+WorkingDirectory=/home/joyfulreaper/tcpnoise
+
+EnvironmentFile=/etc/tcpnoise/%i.conf
+
+ExecStart=/bin/sh -c 'exec /home/joyfulreaper/tcpnoise/tcpnoise --bind "$TCPNOISE_BIND" $TCPNOISE_PORTS'
+
+Restart=on-failure
+RestartSec=5
+
+# Permit privileged listener ports without running tcpnoise as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Create the configuration directory:
+
+```sh
+sudo mkdir -p /etc/tcpnoise
+```
+
+Then create one environment file per instance.
+
+### DN42 IPv4 example
+
+```ini
+# /etc/tcpnoise/dn42-v4.conf
+TCPNOISE_SENSOR=overlay-dn42
+TCPNOISE_BIND=172.20.220.54
+TCPNOISE_PORTS="21 22 23 25 80 443 445 3389 5900 8080 8443"
+```
+
+### DN42 IPv6 example
+
+```ini
+# /etc/tcpnoise/dn42-v6.conf
+TCPNOISE_SENSOR=overlay-dn42
+TCPNOISE_BIND=fdf0:e12c:5528::54
+TCPNOISE_PORTS="21 22 23 25 80 443 445 3389 5900 8080 8443"
+```
+
+### Yggdrasil IPv6 example
+
+```ini
+# /etc/tcpnoise/ygg-v6.conf
+TCPNOISE_SENSOR=overlay-ygg
+TCPNOISE_BIND=203:b4fc:fbe5:6a84:238d:69a1:dcbf:ed54
+TCPNOISE_PORTS="21 22 23 25 80 443 445 3389 5900 8080 8443"
+```
+
+Reload systemd:
+
+```sh
+sudo systemctl daemon-reload
+```
+
+Start one instance for testing:
+
+```sh
+sudo systemctl start tcpnoise@dn42-v4.service
+sudo systemctl status --no-pager tcpnoise@dn42-v4.service
+```
+
+Verify the listeners:
+
+```sh
+sudo ss -lntp | grep tcpnoise
+```
+
+Enable tested instances at boot:
+
+```sh
+sudo systemctl enable \
+  tcpnoise@dn42-v4.service \
+  tcpnoise@dn42-v6.service \
+  tcpnoise@ygg-v6.service
+```
+
+Check:
+
+```sh
+systemctl is-enabled \
+  tcpnoise@dn42-v4.service \
+  tcpnoise@dn42-v6.service \
+  tcpnoise@ygg-v6.service
+```
+
+### Firewall notes
+
+Opening a tcpnoise port globally is usually unnecessary on a multi-network sensor host.
+
+Prefer firewall rules scoped to:
+
+* the intended interface
+* the intended local destination address
+* the configured tcpnoise port set
+
+For example, a DN42 sensor should not accidentally make the same ports reachable from a management or clearnet interface merely because the process exists.
+
+The listener bind and firewall policy should both enforce the intended exposure.
+
+### Shared working-directory caveat
+
+Instances using the same `WorkingDirectory` also share:
+
+```text
+tcpnoise.db
+<port>.log files
+<port>_banner.txt files
+```
+
+NATS events remain distinguishable through `TCPNOISE_SENSOR`, but local SQLite statistics and per-port log files can combine traffic from several instances.
+
+For example, `overlay-dn42` and `overlay-ygg` can publish distinct NATS identities while still updating the same local `tcpnoise.db` if both services use:
+
+```text
+WorkingDirectory=/home/joyfulreaper/tcpnoise
+```
+
+If per-sensor local persistence is required, give each instance a separate working/data directory.
 
 ## NATS configuration
 
@@ -308,13 +520,19 @@ The current deployment keeps NATS on a trusted/private network rather than expos
 
 The publisher connects once at startup. If the connection cannot be established, tcpnoise still continues its normal collection loop.
 
-Each accepted connection is published as a JSON event on:
+Each accepted connection is published on:
 
 ```text
 tcpnoise.connection
 ```
 
-The current event envelope looks like:
+The sensor name is:
+
+1. `TCPNOISE_SENSOR`, when set to a non-empty value
+2. otherwise the system hostname
+3. `unknown` only if hostname lookup fails
+
+A current event looks roughly like:
 
 ```json
 {
@@ -322,22 +540,27 @@ The current event envelope looks like:
   "EventType": "tcpnoise.connection",
   "Source": "tcpnoise",
   "SchemaVersion": 1,
-  "OccurredAt": "2026-09-06T20:04:33Z",
-  "ReceivedAt": "2026-09-06T20:04:33Z",
+  "OccurredAt": "2026-10-10T23:45:45Z",
+  "ReceivedAt": "2026-10-10T23:45:45Z",
   "CorrelationId": null,
   "CausationId": null,
   "Payload": {
+    "sensor": "overlay-dn42",
     "connectionNumber": 2,
-    "listenPort": 2222,
+    "listenPort": 22,
     "ipVersion": 6,
-    "remoteAddress": "2001:db8::1234",
-    "remotePort": 59170,
-    "seenCount": 2
+    "remoteAddress": "fd42:42:42:252::9",
+    "remotePort": 49326,
+    "seenCount": 1,
+    "banner": null,
+    "bannerSent": false,
+    "payloadLength": 0,
+    "payload": ""
   }
 }
 ```
 
-The event currently contains connection metadata, not the captured network payload.
+The event contains bounded connection/payload information suitable for live consumers such as TcpNoiseClicker.
 
 Messaging is deliberately best effort:
 
@@ -381,7 +604,7 @@ IPv6 endpoints are formatted with brackets:
 
 Connection numbers are maintained separately for each configured listening port.
 
-IPv4 and IPv6 connections to the same configured port contribute to the same in-process port counter.
+IPv4 and IPv6 connections to the same configured port contribute to the same in-process port counter when they are handled by the same process.
 
 The `seen` value comes from SQLite and therefore survives tcpnoise restarts.
 
@@ -446,7 +669,7 @@ sqlite3 -header -box tcpnoise.db \
    ORDER BY connection_count DESC;'
 ```
 
-This makes it easy to answer questions such as whether port 23 is attracting more garbage than 3389, or how much of a port's traffic is arriving over IPv6.
+This makes it easy to compare activity on ports and between IPv4/IPv6.
 
 SQLite timestamps are stored in UTC.
 
@@ -491,6 +714,8 @@ watch ./check_stats.sh
 ```
 
 Running the script independently on multiple sensors makes it easy to compare how quickly different public IPs are discovered and which exposed ports attract the most traffic.
+
+Remember the shared-working-directory caveat when multiple systemd instances use the same SQLite file.
 
 ## Payload capture
 
@@ -542,13 +767,15 @@ Each configured port gets its own append-only text log in the current working di
 3389.log
 ```
 
-IPv4 and IPv6 connections for the same port share the same log file.
+IPv4 and IPv6 connections for the same port/process share the same log file.
+
+Multiple systemd instances also share those files when configured with the same working directory.
 
 Each log is opened once at startup and stays open until shutdown.
 
 Events are flushed after each connection.
 
-Console timestamps show only local time:
+Console timestamps show local time:
 
 ```text
 [18:19:43]
@@ -629,13 +856,13 @@ WARNING: THE FIREWALL IS NOT MAD, JUST DISAPPOINTED
 
 `banners.txt` is not loaded automatically.
 
-You can copy it for one port:
+Copy it for one port:
 
 ```sh
 cp banners.txt 2222_banner.txt
 ```
 
-or symlink the same shared pool to several ports:
+or symlink a shared pool to several ports:
 
 ```sh
 for p in 21 23 80 443 420 2222 2323 3389 5432 8080 42069; do
@@ -643,7 +870,7 @@ for p in 21 23 80 443 420 2222 2323 3389 5432 8080 42069; do
 done
 ```
 
-A port can still have a dedicated pool. For example, port 23 can use a Telnet/router/IoT-style banner list while the other ports continue to point at `banners.txt`.
+A port can still have a dedicated pool. For example, port 23 can use a Telnet/router/IoT-style banner list while other ports use `banners.txt`.
 
 If `23_banner.txt` is currently a symlink and you want to replace it with a real file:
 
@@ -658,20 +885,13 @@ Restart tcpnoise after changing banner files because banner pools are loaded at 
 
 `TcpNoiseClicker` is a Windows-only .NET 10 WinForms tray application.
 
-It uses:
+It uses NATS.Net and subscribes to:
 
 ```text
-NATS.Net 3.1.0
+tcpnoise.connection
 ```
 
-The current NATS endpoint and subject are hard-coded in `TrayApplicationContext.cs`:
-
-```csharp
-private const string NatsUrl = "nats://10.99.0.1:4222";
-private const string Subject = "tcpnoise.connection";
-```
-
-Change the URL for another environment.
+The current NATS endpoint and subject are configured in `TrayApplicationContext.cs`.
 
 ### Build and run
 
@@ -682,27 +902,13 @@ dotnet restore .\TcpNoiseClicker\TcpNoiseClicker.csproj
 dotnet run --project .\TcpNoiseClicker\TcpNoiseClicker.csproj
 ```
 
-The app has no normal main window. It appears in the Windows notification area.
+The app appears in the Windows notification area.
 
-Right-click the icon for:
-
-```text
-Mute
-----
-Exit
-```
-
-The tray tooltip tracks:
-
-```text
-<count today> | <last remote address> -> <listening port>
-```
-
-Long addresses are middle-truncated to stay within the small Windows tray-tooltip text limit.
+The history view can be used to inspect incoming events from multiple sensors, including their sensor name, remote endpoint, listening port, IP version, seen count, banner, and captured payload.
 
 ### Sound files
 
-The project currently includes:
+The project includes sound files such as:
 
 ```text
 click.wav
@@ -711,9 +917,7 @@ ipv6.wav
 bong.wav
 ```
 
-All WAV files in the project directory are copied to the output directory automatically.
-
-`System.Media.SoundPlayer` is deliberately simple and works best with ordinary uncompressed PCM WAV files.
+`System.Media.SoundPlayer` works best with ordinary uncompressed PCM WAV files.
 
 A useful ffmpeg conversion command is:
 
@@ -723,47 +927,25 @@ ffmpeg -i input.mp3 -ac 1 -ar 44100 -c:a pcm_s16le output.wav
 
 ### Sound routing
 
-Current precedence:
+The clicker has historically used this precedence:
 
 ```text
 1. port 420 / 42069 -> bong.wav
 2. IPv6             -> ipv6.wav
 3. seenCount == 1   -> new.wav
-4. mapped port      -> port-specific SoundPlayer
+4. mapped port      -> port-specific sound
 5. otherwise        -> click.wav
 ```
 
-This means a new IPv6 address gets the IPv6 sound rather than the first-seen sound.
+Mute suppresses audio without stopping event reception/counting.
 
-A connection to port 420 or 42069 always gets the bong.
+### Burst-audio limitation
 
-The first-seen sound therefore currently represents a new IPv4 address.
+Real Internet traffic can arrive in large bursts.
 
-The app counts events even while muted; mute only suppresses audio.
+Audio notification should be treated as a convenience; event reception/counting is the important path.
 
-### Known burst-audio limitation
-
-Real Internet traffic can arrive in very large bursts.
-
-The current clicker calls `SoundPlayer.Play()` directly for each received NATS event. During a sufficiently large burst, Windows audio playback can temporarily choke or stop producing every individual sound even though the subscriber continues receiving and counting events. Playback recovers afterward.
-
-The planned fix is to separate event counting from audio playback and use a bounded/serialized sound queue or similar strategy:
-
-```text
-NATS event
-   |
-   +--> always record/count event
-   |
-   v
-bounded sound queue
-   |
-   v
-serialized playback
-```
-
-Excess **sound notifications** may be dropped or coalesced during an extreme burst, but the actual tcpnoise events should still be counted.
-
-This keeps the Geiger-counter effect without allowing a scanner burst to create minutes of delayed audio backlog.
+A bounded/serialized sound queue remains a reasonable improvement if scanner bursts create audio contention or delayed playback.
 
 ## Testing NATS delivery
 
@@ -779,15 +961,19 @@ Or, from another machine that can reach the private broker:
 nats sub tcpnoise.connection --server nats://10.99.0.1:4222
 ```
 
-You can also publish a fake event to test the clicker without waiting for a scanner:
+You can also publish a fake event to test a consumer without waiting for a scanner.
 
-```powershell
-nats pub tcpnoise.connection '{"Payload":{"connectionNumber":999,"listenPort":23,"ipVersion":4,"remoteAddress":"203.0.113.123","remotePort":12345,"seenCount":1}}' --server nats://10.99.0.1:4222
+For real end-to-end testing, connect to one of the configured listener ports from a host that can reach the sensor:
+
+```sh
+nc -vz 172.20.220.54 22
 ```
+
+Then verify that the event arrives with the expected sensor name.
 
 ## Shutdown
 
-Press `Ctrl+C` to stop tcpnoise.
+Press `Ctrl+C` to stop a foreground tcpnoise process.
 
 The collector handles `SIGINT` and `SIGTERM`, exits its polling loop, closes listeners, closes text logs, closes SQLite, frees banner pools, disconnects from NATS, and prints final per-port connection counts.
 
@@ -801,11 +987,15 @@ Port 3389 connection attempts: 12
 
 `SIGPIPE` is ignored so a client disappearing during a banner send cannot unexpectedly terminate the process.
 
-The Windows clicker exits from the tray menu and cancels its NATS subscription before disposing its sound players and tray icon.
+systemd stops use `SIGTERM`, so the same graceful shutdown path is used by:
+
+```sh
+sudo systemctl stop tcpnoise@dn42-v4
+```
 
 ## How tcpnoise works
 
-For every requested port, tcpnoise creates:
+Without `--bind`, for every requested port tcpnoise creates:
 
 ```text
 IPv4 TCP listener
@@ -813,6 +1003,8 @@ IPv6 TCP listener
 ```
 
 IPv6 sockets use `IPV6_V6ONLY`, allowing predictable separate IPv4 and IPv6 listeners on FreeBSD and Linux.
+
+With `--bind`, the supplied numeric address determines the address family and tcpnoise creates only that family, bound to that address.
 
 All listeners are placed into a `pollfd` array and monitored with `poll()`.
 
@@ -853,6 +1045,8 @@ Accepted clients are currently handled synchronously with a short receive timeou
 
 ## Source layout
 
+The main collector is split into a small set of modules rather than one file per helper:
+
 ```text
 .
 ├── Makefile
@@ -873,33 +1067,22 @@ Accepted clients are currently handled synchronously with a short receive timeou
 │   ├── logging.c
 │   ├── messaging.c
 │   └── network.c
-└── TcpNoiseClicker/
-    ├── Program.cs
-    ├── TcpNoiseEvent.cs
-    ├── TrayApplicationContext.cs
-    ├── TcpNoiseClicker.csproj
-    ├── TcpNoiseClicker.slnx
-    ├── click.wav
-    ├── new.wav
-    ├── ipv6.wav
-    └── bong.wav
+├── TcpNoiseClicker/
+└── AndroidNoiseClicker/
 ```
 
-The C project intentionally avoids splitting every tiny helper into its own module.
-
-The Windows client is kept separate from the collector and communicates only through NATS.
+The Windows and Android clients are separate from the C collector and communicate through NATS.
 
 ## Current limits
 
 | Setting | Value |
 | --- | ---: |
 | Maximum port arguments | 11 |
-| Maximum listeners | 22 |
+| Maximum listeners without `--bind` | 22 |
+| Maximum listeners with `--bind` | 11 |
 | Initial payload capture | 4096 bytes |
 | Banner send buffer | 256 bytes |
 | Receive timeout | ~250 ms |
-| NATS JSON buffer | 1024 bytes |
-| Clicker tooltip text | capped at 63 characters |
 
 Persistent seen-IP tracking and per-port/IP-version connection totals are stored in SQLite.
 
@@ -921,26 +1104,24 @@ It is deliberately simple:
 * no protocol emulation beyond the banner
 * no packet capture
 * no raw SYN monitoring
-* no privilege dropping yet
+* no internal privilege-dropping mechanism
 * `rand()` is used for banner selection
 * NATS URL and subject are currently compile/source configuration rather than runtime options
-* multi-sensor events do not yet include a sensor/site identifier
 
 A client that connects and remains silent can occupy the single connection handler until the receive timeout expires.
 
-That is acceptable for the current goal: observing ordinary unsolicited Internet background traffic without turning the project into a full honeypot framework.
+That is acceptable for the current goal: observing ordinary unsolicited background traffic without turning the project into a full honeypot framework.
 
 ## Planned ideas
 
 Possible future work includes:
 
-* Add sensor/site identity to NATS events for multi-sensor deployments
-* Fix TcpNoiseClicker burst audio with bounded/serialized playback
-* Recent-events window in TcpNoiseClicker
-* Port-specific sounds in TcpNoiseClicker
-* Sound selection / volume controls later if they are worth the dependency
+* Separate per-sensor local database/log directories for multi-instance deployments where local statistics must remain isolated
+* Make NATS endpoint/subject runtime configurable
+* Improve TcpNoiseClicker burst audio with bounded/serialized playback
+* More port-specific sounds and UI controls where useful
 * Restore separate Mission Control publication while keeping `tcpnoise.connection` for ephemeral live subscribers
-* Include captured payload previews in telemetry only after deciding how they should be bounded/escaped
+* Decide how much captured payload data should be retained downstream
 * Track source-IP -> destination-port activity
 * Simple scanner/probe classification
   * HTTP
@@ -952,7 +1133,7 @@ Possible future work includes:
 * More rolling statistics
 * terminal scrollback
 * per-port terminal views
-* configurable log/database/NATS paths
+* configurable log/database paths
 * bounded multi-read payload capture
 * optional limited protocol emulation
 * optional TLS handling for TLS-like probes
@@ -973,6 +1154,6 @@ Then something will connect, say absolutely nothing, and disappear.
 
 And now, thanks to NATS and a Windows tray app, your workstation can make a different ridiculous noise when it happens.
 
-Put another sensor somewhere else and now you can compare which part of the Internet finds each box first.
+Put another sensor somewhere else — or bind separate collectors to DN42 and Yggdrasil — and now you can compare which network finds each listener first.
 
 I wanted to see that happen while learning sockets, POSIX APIs, FreeBSD, C, SQLite, and a little event-driven integration around the edges.
