@@ -927,25 +927,94 @@ ffmpeg -i input.mp3 -ac 1 -ar 44100 -c:a pcm_s16le output.wav
 
 ### Sound routing
 
-The clicker has historically used this precedence:
+Place overrides under `sounds/` beside the executable (`AppContext.BaseDirectory`).
+The directory is optional; each node and each individual override is optional too.
+
+```text
+TcpNoiseClicker/
+  click.wav                 # required ultimate fallback
+  new.wav                   # optional
+  ipv6.wav                  # optional
+  bong.wav                  # optional
+  sounds/
+    dn42/
+      all.wav               # every event from this sensor
+    ygg/
+      all.wav
+    ports/
+      22.wav                # global port override
+      80.wav
+      443.wav
+    clanker/                # matches the event's Sensor
+      click.wav
+      new.wav
+      ipv6.wav
+      bong.wav
+      ports/
+        22.wav              # node port override
+        443.wav
+    scopecreep/
+      bong.wav
+      ports/
+        80.wav
+```
+
+For every event, resolution uses this exact order:
+
+1. `sounds/<Sensor>/all.wav`
+2. `sounds/<Sensor>/ports/<ListenPort>.wav`
+3. `sounds/ports/<ListenPort>.wav`
+4. `sounds/<Sensor>/<semantic sound filename>`
+5. `<AppContext.BaseDirectory>/<semantic sound filename>`
+6. `<AppContext.BaseDirectory>/click.wav`
+
+The semantic filename is selected with these rules, in order:
 
 ```text
 1. port 420 / 42069 -> bong.wav
 2. IPv6             -> ipv6.wav
 3. seenCount == 1   -> new.wav
-4. mapped port      -> port-specific sound
-5. otherwise        -> click.wav
+4. otherwise        -> click.wav
 ```
 
-Mute suppresses audio without stopping event reception/counting.
+A sensor's `all.wav` beats every other override and semantic rule, giving that
+entire sensor/network one recognizable sound. Port overrides beat every semantic
+rule, including IPv6, first-seen, and bong.
+Missing, inaccessible, corrupt, or unplayable optional sounds silently fall through
+to the next candidate. A missing/bad required `click.wav` still reports a startup
+error; if it fails during playback, the clicker retains its system-beep fallback.
 
-### Burst-audio limitation
+Loaded sounds and missing/failed lookups are cached by full path, distinguishing
+sensor, port, and sound filename (including `all.wav`). Playback failures are
+retired from the cache.
+Restart the app after adding or changing overrides. All cached players are disposed
+after the single sound consumer stops.
+
+Sensor names must be safe single Windows directory names. Paths, traversal,
+invalid filename characters, device names, trailing dots/spaces, and the reserved
+name `ports` skip node overrides and still use global sounds. Names match Windows
+filesystem casing. Checked-in files beneath `TcpNoiseClicker/sounds/**` are copied
+to build and publish output with their directory structure preserved.
+
+Mute suppresses audio without stopping event reception/counting. History and
+tooltips continue to update independently of playback.
+
+Run the sound-resolution tests without audio hardware or a NATS connection:
+
+```powershell
+dotnet test .\TcpNoiseClicker\TcpNoiseClicker.slnx
+```
+
+### Burst audio
 
 Real Internet traffic can arrive in large bursts.
 
 Audio notification should be treated as a convenience; event reception/counting is the important path.
 
-A bounded/serialized sound queue remains a reasonable improvement if scanner bursts create audio contention or delayed playback.
+The clicker uses a bounded queue of 32 events and one consumer with synchronous
+playback. When the queue is full, new audio notifications are dropped while all
+received events still update counts and history. Override loading and resolution run
+on that consumer, so override loading does not block NATS reception.
 
 ## Testing NATS delivery
 
