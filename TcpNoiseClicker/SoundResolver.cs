@@ -15,6 +15,7 @@ internal sealed class SoundResolver : IDisposable
     private readonly Func<string, IEventSound> _loadSound;
     private readonly Dictionary<string, IEventSound?> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<IEventSound> _ownedSounds = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<string> _fastPlaybackFailures = new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
 
     public SoundResolver(string baseDirectory, Func<string, IEventSound> loadSound)
@@ -48,25 +49,41 @@ internal sealed class SoundResolver : IDisposable
     // A successful Load does not guarantee PlaySync will accept the WAV.
     // Retire playback failures too, and continue through the same fallback chain.
     public bool TryPlay(TcpNoisePayload? connection)
+        => TryPlay(connection, sound => sound.PlaySync(), null);
+
+    public bool TryPlayFast(TcpNoisePayload? connection, Action<IEventSound> startPlayback)
+        => TryPlay(connection, startPlayback, _fastPlaybackFailures);
+
+    private bool TryPlay(TcpNoisePayload? connection, Action<IEventSound> play, HashSet<string>? playbackFailures)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var semanticSound = GetSemanticSound(connection);
 
         foreach (var path in GetCandidatePaths(connection, semanticSound))
         {
+            if (playbackFailures?.Contains(path) == true)
+                continue;
             var sound = TryLoad(path);
             if (sound is null)
                 continue;
 
             try
             {
-                sound.PlaySync();
+                play(sound);
                 return true;
             }
             catch
             {
-                _cache[path] = null;
-                Release(sound);
+                if (playbackFailures is not null)
+                {
+                    // A format/device failure in fast mode must not disable normal playback.
+                    playbackFailures.Add(path);
+                }
+                else
+                {
+                    _cache[path] = null;
+                    Release(sound);
+                }
             }
         }
 
@@ -173,5 +190,6 @@ internal sealed class SoundResolver : IDisposable
         foreach (var sound in _ownedSounds.ToArray())
             Release(sound);
         _cache.Clear();
+        _fastPlaybackFailures.Clear();
     }
 }

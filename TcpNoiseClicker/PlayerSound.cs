@@ -2,11 +2,16 @@ using System.Media;
 
 namespace TcpNoiseClicker;
 
-internal sealed class PlayerSound : IEventSound
+internal sealed class PlayerSound : IEventSound, IFastEventSound
 {
     private readonly SoundPlayer _player;
+    private readonly Lazy<byte[]> _fastWaveData;
 
-    private PlayerSound(SoundPlayer player) => _player = player;
+    private PlayerSound(SoundPlayer player, string path)
+    {
+        _player = player;
+        _fastWaveData = new(() => File.ReadAllBytes(path));
+    }
 
     public static IEventSound Load(string path)
     {
@@ -14,7 +19,7 @@ internal sealed class PlayerSound : IEventSound
         try
         {
             player.Load();
-            return new PlayerSound(player);
+            return new PlayerSound(player, path);
         }
         catch
         {
@@ -24,6 +29,14 @@ internal sealed class PlayerSound : IEventSound
     }
 
     public void PlaySync() => _player.PlaySync();
+
+    public IActiveSound StartPlayback() => WavePlayback.Start(_fastWaveData.Value);
+
+    public static void StopSerialPlayback()
+    {
+        using var player = new SoundPlayer();
+        player.Stop();
+    }
 
     public void Dispose() => _player.Dispose();
 }

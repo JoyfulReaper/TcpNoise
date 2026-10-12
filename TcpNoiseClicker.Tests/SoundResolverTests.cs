@@ -5,6 +5,32 @@ namespace TcpNoiseClicker.Tests;
 
 public sealed class SoundResolverTests
 {
+    [Fact]
+    public void FastPlaybackUsesSamePrecedenceAndCachesFailuresWithoutDisablingNormalSounds()
+    {
+        var loader = new FakeLoader("click.wav", "sounds/dn42/all.wav", "sounds/dn42/ports/22.wav");
+        using var resolver = loader.CreateResolver();
+        var fastStarted = new List<string>();
+        var failedStarts = 0;
+        void Start(IEventSound sound)
+        {
+            var path = ((FakeSound)sound).Path;
+            if (path == "sounds/dn42/all.wav")
+            {
+                failedStarts++;
+                throw new InvalidDataException();
+            }
+            fastStarted.Add(path);
+        }
+
+        Assert.True(resolver.TryPlayFast(Event(sensor: "dn42", ipVersion: 6, seen: 1), Start));
+        Assert.True(resolver.TryPlayFast(Event(sensor: "dn42", ipVersion: 6, seen: 1), Start));
+        Assert.Equal(new[] { "sounds/dn42/ports/22.wav", "sounds/dn42/ports/22.wav" }, fastStarted);
+        Assert.Equal(1, failedStarts);
+        Assert.True(resolver.TryPlay(Event(sensor: "dn42")));
+        Assert.Equal("sounds/dn42/all.wav", Assert.Single(loader.Played));
+    }
+
     [Theory]
     [InlineData(22, 4, 2, "click.wav")]
     [InlineData(22, 6, 2, "ipv6.wav")]

@@ -1,8 +1,6 @@
 ﻿using NATS.Client.Core;
 using NATS.Net;
-using System.Media;
 using System.Text.Json;
-using System.Threading.Channels;
 
 namespace TcpNoiseClicker;
 
@@ -14,9 +12,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly CancellationTokenSource _cancellation = new();
     private readonly NotifyIcon _notifyIcon;
     private readonly ToolStripMenuItem _muteMenuItem;
+    private readonly ToolStripMenuItem _fastSoundMenuItem;
     private readonly Task _listenerTask;
 
     private readonly SoundResolver _sounds;
+    private readonly SoundPlaybackWorker _playback;
 
     private volatile bool _muted;
 
@@ -34,7 +34,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private ushort _lastListenPort;
 
     private const int SoundQueueCapacity = 32;
-    private readonly Channel<TcpNoisePayload?> _soundQueue;
     private readonly Task _soundTask;
 
     private const int HistoryCapacity = 50;
@@ -60,11 +59,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
             throw;
         }
 
+        _playback = new SoundPlaybackWorker(_sounds, SoundQueueCapacity);
+
         var historyMenuItem = new ToolStripMenuItem("Show history");
         historyMenuItem.Click += ShowHistory;
 
         _muteMenuItem = new ToolStripMenuItem("Mute");
         _muteMenuItem.Click += ToggleMute;
+
+        _fastSoundMenuItem = new ToolStripMenuItem("Fast sound mode") { CheckOnClick = true };
+        _fastSoundMenuItem.CheckedChanged += (_, _) => _playback.SetFastMode(_fastSoundMenuItem.Checked);
 
         var exitMenuItem = new ToolStripMenuItem("Exit");
         exitMenuItem.Click += Exit;
@@ -72,6 +76,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var menu = new ContextMenuStrip();
         menu.Items.Add(historyMenuItem);
         menu.Items.Add(_muteMenuItem);
+        menu.Items.Add(_fastSoundMenuItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitMenuItem);
 
@@ -93,16 +98,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tooltipTimer.Tick += (_, _) => RefreshTooltip();
         _tooltipTimer.Start();
 
-        _soundQueue = Channel.CreateBounded<TcpNoisePayload?>(
-            new BoundedChannelOptions(SoundQueueCapacity)
-            {
-                SingleReader = true,
-                SingleWriter = true,
-                FullMode = BoundedChannelFullMode.Wait
-            });
-
         _soundTask = Task.Run(
-            () => PlaySoundsAsync(_cancellation.Token));
+            () => _playback.RunAsync(_cancellation.Token));
 
         _listenerTask = Task.Run(
             () => ListenAsync(_cancellation.Token));
@@ -159,23 +156,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
                 if (!_muted)
                 {
-                    _soundQueue.Writer.TryWrite(connectionEvent?.Payload);
+                    _playback.TryEnqueue(connectionEvent?.Payload);
                 }
-            }
-        }
-        catch (OperationCanceledException)
-            when (cancellationToken.IsCancellationRequested)
-        {
-        }
-    }
-
-    private async Task PlaySoundsAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await foreach (var connection in _soundQueue.Reader.ReadAllAsync(cancellationToken))
-            {
-                PlaySound(connection);
             }
         }
         catch (OperationCanceledException)
@@ -288,21 +270,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
             + value[^endLength..];
     }
 
-    private void PlaySound(TcpNoisePayload? connection)
-    {
-        if (_sounds.TryPlay(connection))
-            return;
-
-        // Retain the existing beep if even the required click cannot play.
-        try
-        {
-            SystemSounds.Beep.Play();
-        }
-        catch
-        {
-        }
-    }
-
     private void ToggleMute(object? sender, EventArgs e)
     {
         _muted = !_muted;
@@ -327,6 +294,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         finally
         {
+            _playback.Dispose();
             _sounds.Dispose();
 
             _notifyIcon.Dispose();

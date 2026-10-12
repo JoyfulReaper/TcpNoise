@@ -1016,6 +1016,34 @@ playback. When the queue is full, new audio notifications are dropped while all
 received events still update counts and history. Override loading and resolution run
 on that consumer, so override loading does not block NATS reception.
 
+### Fast sound mode
+
+The tray menu's **Fast sound mode** toggle enables overlapping WAV playback. It
+defaults to OFF and resets to OFF on launch; the app has no saved preferences.
+OFF retains serialized `SoundPlayer.PlaySync()` playback and the existing sound
+resolution/fallback chain.
+
+ON uses NAudio's independent `WaveOutEvent` outputs so long WAVs can keep playing
+under subsequent sounds. WAV bytes are cached in memory; each active voice owns
+its own reader and output device, which are disposed when it finishes. The limits
+are easy to tune in `FastSoundScheduler.cs`:
+
+```csharp
+FastSoundStartIntervalMs = 75;
+MaxConcurrentSounds = 4;
+```
+
+The interval is between starts, without truncating a WAV. When all four voices
+are busy, audio events are dropped. The existing 32-event queue still bounds
+pending notifications, while NATS reception, counts, history, and the UI continue
+independently.
+
+Turning ON lets a currently playing serial sound finish before overlapping
+playback begins. Turning OFF wakes the audio worker to stop fast voices before
+resuming serial playback; an in-progress launch interval can delay this by up to
+75 ms. Muting continues to suppress new audio events. Exit cancels pending
+launches and stops active playback without waiting for long WAVs to finish.
+
 ## Testing NATS delivery
 
 With the NATS CLI, listen for live tcpnoise events:
