@@ -32,7 +32,7 @@
 
 #define NATS_SERVER "nats://10.99.0.1:4222"
 #define MAX_PAYLOAD_LEN 4096
-#define MAX_PORT 11
+#define MAX_PORT 64
 #define MAX_LISTENERS (MAX_PORT * 2)
 #define MAX_SENSOR_NAME 256
 
