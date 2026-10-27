@@ -336,6 +336,7 @@ enum connection_result handle_connection(
 		banner_sent,
 		event.payload,
 		event.payload_len > 0 ? (size_t)event.payload_len : 0,
+		has_user_agent ? user_agent : NULL,
 		event.timestamp_utc);
 
 	char remote_endpoint[INET6_ADDRSTRLEN + 8];
@@ -651,7 +652,12 @@ int main (int argc, char *argv[])
 	}
 
 	// Connect to NATS
-	natsConnection *nats_connection = messaging_connect(NATS_SERVER);
+	const char *nats_url = getenv("TCPNOISE_NATS_URL");
+
+	if (nats_url == NULL || nats_url[0] == '\0')
+		nats_url = NATS_SERVER;
+
+	natsConnection *nats_connection = messaging_connect(nats_url);
 
 	// Main loop
 	while (running) {
