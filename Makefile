@@ -10,7 +10,7 @@ NATS_LIBS != pkg-config --libs libnats
 CFLAGS += ${SQLITE_CFLAGS} ${NATS_CFLAGS}
 LDLIBS += ${SQLITE_LIBS} ${NATS_LIBS}
 
-SRC = src/main.c src/banner.c src/logging.c src/network.c src/database.c src/messaging.c
+SRC = src/main.c src/banner.c src/logging.c src/network.c src/database.c src/messaging.c src/http.c
 OBJ = ${SRC:.c=.o}
 
 tcpnoise: ${OBJ}

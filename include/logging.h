@@ -29,6 +29,7 @@ bool log_connection(
     ssize_t length,
     enum receive_status status,
     const char *banner,
-    bool banner_sent);
+    bool banner_sent,
+    const char *user_agent);
 
 #endif

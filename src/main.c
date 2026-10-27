@@ -11,6 +11,7 @@
 #include "network.h"
 #include "database.h"
 #include "messaging.h"
+#include "http.h"
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -189,19 +190,19 @@ void capture_timestamp_utc(char *buffer, size_t buffer_size)
 void capture_timestamp(char *buffer, size_t buffer_size)
 {
 	snprintf(buffer, buffer_size, "(unknown time)");
-	
+
 	time_t now = time(NULL);
 	if(now == (time_t)-1)
 	{
 		return;
 	}
-	
+
 	struct tm *t_info = localtime(&now);
 	if(t_info == NULL)
 	{
 		return;
 	}
-	
+
 	if(strftime(buffer, buffer_size, "%Y-%m-%d %H:%M:%S", t_info) == 0)
 	{
 		snprintf(buffer, buffer_size, "(unknown time)");
@@ -219,9 +220,9 @@ enum connection_result handle_connection(
 	socklen_t peer_addr_size)
 {
 	struct connection_event event;
-	
+
 	bool banner_sent = false;
-	
+
 	capture_timestamp(event.timestamp, sizeof event.timestamp);
 	capture_timestamp_utc(event.timestamp_utc, sizeof event.timestamp_utc);
 
@@ -235,7 +236,7 @@ enum connection_result handle_connection(
 			// printf("Failed to send banner: %s\n", banner);
 		}
 	}
-	
+
 	event.connection_number = connection_number;
 	event.port = listener->port;
 
@@ -260,7 +261,7 @@ enum connection_result handle_connection(
 		close(cfd);
 		return CONNECTION_FATAL;
 	}
-	
+
 	enum receive_status payload_result =
 	receive_payload(
 		cfd,
@@ -283,13 +284,25 @@ enum connection_result handle_connection(
 		perror("recv");
 	}
 
+	char user_agent[256];
+	bool has_user_agent = false;
+
+	if(payload_result == RECEIVE_DATA)
+	{
+		has_user_agent = extract_http_user_agent(
+			event.payload,
+			(size_t)event.payload_len,
+			user_agent,
+			sizeof user_agent);
+	}
+
 	resolve_remote(
 		peer_addr,
 		peer_addr_size,
 		event.ip,
 		sizeof event.ip,
 		&event.remote_port);
-		
+
 	if(!database_record_seen_ip(
 		db,
 		event.ip,
@@ -309,7 +322,7 @@ enum connection_result handle_connection(
 		fprintf(stderr,
 			"Failed to update persistent port activity table\n");
 	}
-	
+
 	messaging_publish_connection(
 		nats_connection,
 		sensor_name,
@@ -332,10 +345,10 @@ enum connection_result handle_connection(
 		peer_addr->ss_family,
 		event.ip,
 		event.remote_port);
-		
+
 	const char *family_name =
 		listener->family == AF_INET6 ? "IPv6" : "IPv4";
-		
+
 	const char *console_time = event.timestamp;
 	if(strlen(event.timestamp) >= 19)
 	{
@@ -367,7 +380,7 @@ enum connection_result handle_connection(
 		close(cfd);
 		return CONNECTION_OK;
 	}
-	
+
 	char log_buffer[256];
 
 	int lx = snprintf(
@@ -409,6 +422,11 @@ enum connection_result handle_connection(
 		printf("           banner: <send failed> %s\n", banner);
 	}
 
+	if(has_user_agent)
+	{
+		printf("           user-agent: %s\n", user_agent);
+	}
+
 	if(payload_result == RECEIVE_DATA)
 	{
 		printf("           payload: ");
@@ -440,7 +458,8 @@ enum connection_result handle_connection(
 		event.payload_len,
 		payload_result,
 		banner,
-		banner_sent);
+		banner_sent,
+		has_user_agent ? user_agent : NULL);
 
 	return CONNECTION_OK;
 }
@@ -448,27 +467,27 @@ enum connection_result handle_connection(
 int main (int argc, char *argv[])
 {
 	srand(time(NULL));
-	
+
 	// Parse port
 	uint16_t ports[MAX_PORT];
 	size_t port_count = 0;
-	
+
         const char *bind_address = NULL;
         int bind_family = AF_UNSPEC;
 
 	struct listener listeners[MAX_LISTENERS];
 	size_t listener_count = 0;
-	
+
 	uint64_t connection_counts[MAX_PORT] = {0};
 	struct banner_pool banner_pools[MAX_PORT] = {0};
-	
+
 	FILE *log_files[MAX_PORT] = {0};
-	
+
 	struct pollfd pollfds[MAX_LISTENERS];
-	
+
 	int families[] = { AF_INET, AF_INET6 };
 	size_t family_count = sizeof families / sizeof families[0];
-	
+
         if(!process_arguments(
             argc, argv, ports, &port_count,
             &bind_address, &bind_family))
@@ -476,7 +495,7 @@ int main (int argc, char *argv[])
 		print_usage(argv[0]);
 		return EXIT_FAILURE;
 	}
-	
+
         // Restrict listeners to the requested address family.
 	// Without --bind, retain the original IPv4 + IPv6 behavior.
 	if (bind_family != AF_UNSPEC)
@@ -498,32 +517,32 @@ int main (int argc, char *argv[])
 		snprintf(sensor_name, sizeof sensor_name, "unknown");
 	}
 	sensor_name[sizeof sensor_name -1] = '\0';
-	
+
 	// Register signal handler
 	struct sigaction action;
 	memset(&action, 0, sizeof action);
 	action.sa_handler = handle_signal;
 	sigemptyset(&action.sa_mask);
-	
+
 	if(sigaction(SIGINT, &action, NULL) == -1)
 	{
 		perror("sigaction SIGINT");
 		return EXIT_FAILURE;
 	}
-	
+
 	if(sigaction(SIGTERM, &action, NULL) == -1)
 	{
 		perror("sigaction SIGTERM");
 		return EXIT_FAILURE;
 	}
-	
+
 	action.sa_handler = SIG_IGN;
 	if(sigaction(SIGPIPE, &action, NULL) == -1)
 	{
 		perror("sigaction SIGPIPE");
 		return EXIT_FAILURE;
 	}
-	
+
 	// Create, Bind and Listen on socket
 	for(size_t i = 0; i < port_count; i++)
 	{
@@ -535,7 +554,7 @@ int main (int argc, char *argv[])
 			close_log_files(log_files, port_count);
 			return EXIT_FAILURE;
 		}
-		
+
 		// Open log files
 		char logfilename[64];
 		if(!get_log_filename(ports[i], logfilename, sizeof logfilename))
@@ -555,18 +574,18 @@ int main (int argc, char *argv[])
 			free_banner_pools(banner_pools, port_count);
 			return EXIT_FAILURE;
 		}
-		
+
 		for(size_t f = 0; f < family_count; f++)
 		{
 			size_t listener_index = listener_count;
-			
+
 			listeners[listener_index].family = families[f];
 			listeners[listener_index].port = ports[i];
 			listeners[listener_index].port_index = i;
 			listeners[listener_index].fd = create_socket(listeners[listener_index].family);
 			listeners[listener_index].banners = &banner_pools[i];
 			listeners[listener_index].log_file = log_files[i];
-			
+
 			if (listeners[listener_index].fd < 0)
 			{
 				close_log_files(log_files, port_count);
@@ -574,7 +593,7 @@ int main (int argc, char *argv[])
 				free_banner_pools(banner_pools, port_count);
 				return EXIT_FAILURE;
 			}
-			
+
 			if(!bind_socket(
 				listeners[listener_index].fd,
 				listeners[listener_index].port,
@@ -587,7 +606,7 @@ int main (int argc, char *argv[])
 				close_listeners(listeners, listener_count);
 				return EXIT_FAILURE;
 			}
-			
+
 			if(!listen_socket(listeners[listener_index].fd))
 			{
 				close_log_files(log_files, port_count);
@@ -596,44 +615,44 @@ int main (int argc, char *argv[])
 				close_listeners(listeners, listener_count);
 				return EXIT_FAILURE;
 			}
-			
+
 			pollfds[listener_index].fd = listeners[listener_index].fd;
 			pollfds[listener_index].events = POLLIN;
 			pollfds[listener_index].revents = 0;
-			
+
 			listener_count++;
-			
+
 			const char *family_name = listeners[listener_index].family == AF_INET ? "IPv4" : "IPv6";
 			printf("Listening for noise on port: %hu (%s)\n", listeners[listener_index].port, family_name);
 		}
 	}
-	
+
 	// Open database
 	sqlite3 *db = NULL;
 	if(!database_open("tcpnoise.db", &db))
 	{
 		fprintf(stderr, "Failed to open tcpnoise database.\n");
-		
+
 		close_log_files(log_files, port_count);
 		free_banner_pools(banner_pools, port_count);
 		close_listeners(listeners, listener_count);
-		
+
 		return EXIT_FAILURE;
 	}
-	
+
 	if(!database_initialize(db))
 	{
 		database_close(db);
 		close_log_files(log_files, port_count);
 		free_banner_pools(banner_pools, port_count);
 		close_listeners(listeners, listener_count);
-		
+
 		return EXIT_FAILURE;
 	}
-	
+
 	// Connect to NATS
 	natsConnection *nats_connection = messaging_connect(NATS_SERVER);
-	
+
 	// Main loop
 	while (running) {
 		int num_selected = poll(pollfds, listener_count, -1);
@@ -651,7 +670,7 @@ int main (int argc, char *argv[])
 			close_listeners(listeners, listener_count);
 			return EXIT_FAILURE;
 		}
-		
+
 		// Poll
 		for(size_t i = 0; i < listener_count; i++)
 		{
@@ -660,7 +679,7 @@ int main (int argc, char *argv[])
 				struct sockaddr_storage peer_addr;
 				socklen_t peer_addr_size = sizeof peer_addr;
 				int cfd = accept_connection(listeners[i].fd, &peer_addr, &peer_addr_size);
-				
+
 				if(cfd < 0 && errno == EINTR && running == 0)
 				{
 					printf("\nShutdown signal caught, shutting down...\n");
@@ -703,22 +722,22 @@ int main (int argc, char *argv[])
 			}
 		}
 	}
-	
+
 	messaging_disconnect(nats_connection);
 	close_listeners(listeners, listener_count);
 	close_log_files(log_files, port_count);
-	
+
 	if(!database_close(db))
 	{
 		fprintf(stderr, "Failed to close tcpnoise database.\n");
 		return EXIT_FAILURE;
 	}
-	
+
 	for(size_t i = 0; i < port_count; i++)
 	{
 		free_banner_pool(&banner_pools[i]);
 		printf("Port %"PRIu16" connection attempts: %" PRIu64 "\n", ports[i], connection_counts[i]);
 	}
-	
+
 	return EXIT_SUCCESS;
 }
