@@ -19,4 +19,10 @@ tcpnoise: ${OBJ}
 clean:
 	rm -f ${OBJ} tcpnoise
 
-.PHONY: clean
+test:
+	${CC} ${CFLAGS} src/http.c tests/http_test.c -o /tmp/tcpnoise-http-test
+	/tmp/tcpnoise-http-test
+	${CC} ${CFLAGS} src/network.c src/http.c tests/network_test.c -o /tmp/tcpnoise-network-test
+	/tmp/tcpnoise-network-test
+
+.PHONY: clean test

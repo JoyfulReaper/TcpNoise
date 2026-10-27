@@ -44,6 +44,72 @@ int main(void)
 	assert(extract_http_user_agent(mixed_case, sizeof mixed_case - 1, small_buffer, sizeof small_buffer));
 	assert(strcmp(small_buffer, "scan") == 0);
 
-    puts("HTTP User-Agent tests passed");
+
+	const char complete_request[] = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\nBODY";
+
+	size_t header_end = 0;
+
+	assert(find_http_header_end(
+		complete_request,
+		sizeof complete_request - 1,
+		&header_end));
+
+	assert(header_end == sizeof complete_request - 1 - 4);
+	assert(memcmp(complete_request + header_end, "BODY", 4) == 0);
+
+
+	const char http_request[] = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
+	const char non_http[] = "SSH-2.0-OpenSSH_9.0\r\n";
+	const char incomplete_request_line[] = "GET / HTTP/1.1";
+
+	assert(is_http1_request(http_request, sizeof http_request - 1));
+	assert(!is_http1_request(non_http, sizeof non_http - 1));
+	assert(!is_http1_request(incomplete, sizeof incomplete_request_line - 1));
+
+
+	const char complete_get[] =
+    "GET / HTTP/1.1\r\n"
+    "Host: localhost\r\n"
+    "\r\n";
+
+	assert(http_request_complete(complete_get, sizeof complete_get - 1));
+
+
+	const char partial_post[] =
+    "POST /login HTTP/1.1\r\n"
+    "Content-Length: 11\r\n"
+    "\r\n"
+    "hello";
+
+	assert(!http_request_complete(partial_post, sizeof partial_post - 1));
+
+
+	const char complete_post[] =
+		"POST /login HTTP/1.1\r\n"
+		"Content-Length: 11\r\n"
+		"\r\n"
+		"hello=world";
+
+	assert(http_request_complete(complete_post, sizeof complete_post - 1));
+
+
+	const char invalid_length[] =
+    "POST / HTTP/1.1\r\n"
+    "Content-Length: 999999999999999999999999999999999999\r\n"
+    "\r\n";
+
+	assert(!http_request_complete(invalid_length, sizeof invalid_length - 1));
+
+
+	const char chunked_request[] =
+    "POST / HTTP/1.1\r\n"
+    "Transfer-Encoding: chunked\r\n"
+    "\r\n"
+    "5\r\nhello\r\n0\r\n\r\n";
+
+	assert(!http_request_complete(chunked_request, sizeof chunked_request - 1));
+
+
+    puts("HTTP tests passed");
     return 0;
 }

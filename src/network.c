@@ -1,4 +1,5 @@
 #include "network.h"
+#include "http.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -83,6 +84,10 @@ enum receive_status receive_payload(
 		if (received > 0)
 		{
 			*bytes_received += received;
+
+			if (http_request_complete(buffer, (size_t)*bytes_received))
+				return RECEIVE_DATA;
+
 			continue;
 		}
 
