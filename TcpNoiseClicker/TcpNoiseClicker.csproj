@@ -10,12 +10,22 @@
 
 	<ItemGroup>
 		<PackageReference Include="NATS.Net" Version="3.1.0" />
+		<PackageReference Include="NAudio.WinMM" Version="2.3.0" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<Content Include="*.wav">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</Content>
+		<Content Include="sounds\**\*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</Content>
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="TcpNoiseClicker.Tests" />
 	</ItemGroup>
 
 </Project>

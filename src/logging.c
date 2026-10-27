@@ -20,7 +20,7 @@ bool close_log_files(FILE *log_files[], size_t count)
 			log_files[i] = NULL;
 		}
 	}
-	
+
 	return success;
 }
 
@@ -37,7 +37,7 @@ bool get_log_filename(uint16_t port, char *buffer, size_t buffer_size)
 		fprintf(stderr, "buffer is too small\n");
 		return false;
 	}
-	
+
 	return true;
 }
 
@@ -74,24 +74,25 @@ void print_payload(FILE *output, const char *payload, ssize_t length)
 
 // TODO: always check return value of fprintf for failure
 bool log_connection (
-	FILE *file, 
+	FILE *file,
 	const char *message,
 	const char *payload,
 	ssize_t length,
 	enum receive_status status,
 	const char *banner,
-	bool banner_sent)
+	bool banner_sent,
+	const char *user_agent)
 {
 	#ifndef ENABLE_LOGGING
 		return true;
 	#endif
-	
+
 	if(fprintf(file, "%s\n", message) < 0)
 	{
 		fprintf(stderr, "Failed to write to log file.\n");
 		return false;
 	}
-	
+
 	if(banner == NULL)
 	{
 		fprintf(file, "- banner: <none>\n");
@@ -104,7 +105,12 @@ bool log_connection (
 	{
 		fprintf(file, "- banner: <send failed> %s\n", banner);
 	}
-	
+
+	if (user_agent != NULL)
+	{
+		fprintf(file, "- user-agent: %s\n", user_agent);
+	}
+
 	if(status == RECEIVE_DATA)
 	{
 		fprintf(file, "- Payload: ");
@@ -126,12 +132,12 @@ bool log_connection (
 	{
 		fprintf(file, "- Payload: <receive error>\n");
 	}
-	
+
 	if(fflush(file) != 0)
 	{
 		perror("fflush");
 		return false;
 	}
-	
+
 	return true;
 }

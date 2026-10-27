@@ -24,7 +24,8 @@ There is also a small Windows tray companion, **TcpNoiseClicker**, which subscri
 * Persist per-IP seen counts across restarts with SQLite
 * Track first-seen and last-seen timestamps for remote IPs
 * Persist connection totals by listening port and IP version
-* Capture up to 4096 bytes of the initial payload
+* Capture up to 4096 bytes of initial payload through bounded multi-read receiving
+* Stop promptly after complete HTTP/1.x headers or a bounded Content-Length body, while retaining the 250 ms overall receive deadline
 * Escape non-printable payload bytes for readable output
 * Distinguish payload, disconnect, timeout, interruption, and receive-error states
 * Append connection details to a separate text log for each port
@@ -33,8 +34,9 @@ There is also a small Windows tray companion, **TcpNoiseClicker**, which subscri
 * Optionally send randomized per-port banners
 * Record whether a banner was sent, skipped, or failed
 * Publish live connection events to NATS
-* Include sensor identity, banner information, and bounded payload data in NATS events
-* Continue collecting traffic even if NATS is unavailable
+* Include sensor identity, banner information, optional HTTP User-Agent, and bounded payload data in NATS events
+* Extract and log HTTP User-Agent headers when present
+* Continue collecting traffic while NATS is unavailable and reconnect automatically after startup or later outages
 * Graceful `SIGINT` / `SIGTERM` shutdown
 * Ignore `SIGPIPE` when clients disappear during a banner send
 * Modular banner, logging, networking, database, and messaging code
@@ -183,57 +185,38 @@ pkg install sqlite3 pkgconf cmake
 
 #### Building libnats on FreeBSD
 
-If a packaged NATS C client is not available or convenient, my fork of `nats.c` can be used as a known-working source for building `libnats` on FreeBSD:
-
-```text
-https://github.com/JoyfulReaper/nats.c
-```
-
-Clone it:
+If a suitable packaged NATS C client is unavailable, build upstream [nats-io/nats.c](https://github.com/nats-io/nats.c). The FreeBSD `sys/socket.h` portability fix was accepted upstream, so the old JoyfulReaper fork is no longer needed.
 
 ```sh
-git clone https://github.com/JoyfulReaper/nats.c.git
+git clone https://github.com/nats-io/nats.c.git
 cd nats.c
-```
-
-`tcpnoise` only needs the normal NATS client, so NATS Streaming can be omitted:
-
-```sh
-cmake -S . -B build -DNATS_BUILD_STREAMING=OFF
+cmake -S . -B build \
+  -DNATS_BUILD_WITH_TLS=ON \
+  -DNATS_BUILD_LIB_SHARED=ON \
+  -DNATS_BUILD_LIB_STATIC=OFF \
+  -DNATS_BUILD_EXAMPLES=OFF \
+  -DBUILD_TESTING=OFF
 cmake --build build
 ```
 
-Install it under `/usr/local`:
+Check the new shared library's dependencies with `ldd` before installing it, especially after a FreeBSD upgrade. Missing OpenSSL shared libraries can indicate that libnats was built against an older FreeBSD/OpenSSL ABI.
+
+Install under `/usr/local`:
 
 ```sh
-sudo cmake --install build --prefix /usr/local
+sudo cmake --install build
 ```
 
-On a working FreeBSD setup, this installed the `libnats` pkg-config metadata under:
-
-```text
-/usr/local/lib/pkgconfig/libnats.pc
-```
-
-FreeBSD ports/packages may also use `/usr/local/libdata/pkgconfig`, so including both is convenient:
+The build installs pkg-config metadata under `/usr/local/lib/pkgconfig/libnats.pc`. FreeBSD ports/packages may also use `/usr/local/libdata/pkgconfig`:
 
 ```sh
 export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/libdata/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}
-```
-
-Verify the dependencies:
-
-```sh
 pkg-config --modversion libnats
 pkg-config --cflags --libs libnats
 pkg-config --cflags --libs sqlite3
 ```
 
-Then, from the repository root:
-
-```sh
-make
-```
+Return to the tcpnoise repository and run `make`.
 
 ### Debian / Ubuntu
 
@@ -508,19 +491,23 @@ If per-sensor local persistence is required, give each instance a separate worki
 
 ## NATS configuration
 
-The collector currently uses a hard-coded NATS server constant in `src/main.c`:
+The default broker is defined in `src/main.c`:
 
 ```c
 #define NATS_SERVER "nats://10.99.0.1:4222"
 ```
 
-Change that value for another environment.
+Override the address at runtime with `TCPNOISE_NATS_URL`, without rebuilding:
 
-The current deployment keeps NATS on a trusted/private network rather than exposing port `4222` directly to the public Internet.
+```sh
+TCPNOISE_NATS_URL=nats://127.0.0.1:14222 ./tcpnoise --bind 127.0.0.1 18080
+```
 
-The publisher connects once at startup. If the connection cannot be established, tcpnoise still continues its normal collection loop.
+The deployment keeps NATS on a trusted/private network; do not expose its broker port directly to the public Internet.
 
-Each accepted connection is published on:
+The collector uses libnats asynchronous startup retries and reconnects automatically after an established connection drops. It keeps listening, updating SQLite, and writing local logs during an outage. Retry attempts use a two-second interval and are configured to continue indefinitely; connection lifecycle changes are reported on stderr.
+
+Each accepted connection is published on the live subject:
 
 ```text
 tcpnoise.connection
@@ -554,23 +541,24 @@ A current event looks roughly like:
     "seenCount": 1,
     "banner": null,
     "bannerSent": false,
+    "userAgent": null,
     "payloadLength": 0,
     "payload": ""
   }
 }
 ```
 
-The event contains bounded connection/payload information suitable for live consumers such as TcpNoiseClicker.
+`userAgent` is an escaped JSON string when an HTTP User-Agent header was found, and `null` otherwise. It is derived from untrusted, self-reported client input and should not be treated as proof of client identity.
 
-Messaging is deliberately best effort:
+Messaging remains best effort:
 
 ```text
 NATS available   -> publish event
-NATS unavailable -> continue collecting
+NATS unavailable -> continue collecting and retry
 publish fails    -> continue collecting
 ```
 
-A downstream outage should not stop socket handling, SQLite persistence, or local logging.
+libnats has a bounded in-memory reconnect buffer. Reconnecting does **not** guarantee delivery of every event generated during an outage; TcpNoise does not currently implement durable replay.
 
 ## Connection output
 
@@ -584,6 +572,7 @@ For every accepted connection, tcpnoise displays:
 * remote source port
 * persistent seen count
 * banner status
+* optional HTTP User-Agent
 * initial payload status or contents
 
 Example:
@@ -719,42 +708,27 @@ Remember the shared-working-directory caveat when multiple systemd instances use
 
 ## Payload capture
 
-After accepting a connection, tcpnoise performs one bounded `recv()` of up to 4096 bytes.
+For each accepted connection, tcpnoise captures up to **4096 bytes** using multiple bounded `recv()` calls rather than assuming the first read contains the entire request. A monotonic overall **250 ms deadline** limits the receive operation, so a slow client cannot reset the timeout indefinitely by dribbling bytes.
 
-The receive timeout is currently approximately 250 milliseconds.
+The receiver preserves partial data if the peer closes or the deadline expires after some bytes have arrived. A connection with no payload can still be classified as closed, timed out, interrupted, or failed.
+
+For HTTP/1.x-like requests, tcpnoise can finish early once it sees the end of the headers (`\r\n\r\n`). If a valid `Content-Length` is present, it instead waits for that many body bytes, subject to the same 4096-byte cap and overall deadline. Ambiguous framing, such as chunked transfer encoding or invalid `Content-Length`, falls back to bounded capture rather than attempting full HTTP protocol handling.
+
+For non-HTTP traffic (including TLS ClientHello), collection continues until the client closes, the buffer fills, or the deadline expires. TLS termination and decrypted HTTPS inspection are not implemented.
 
 Possible results include:
 
 ```text
-payload: GET / HTTP/1.1\r\n
+payload: GET / HTTP/1.1\r\n\r\n
 payload: <peer closed>
 payload: <timeout>
 payload: <interrupted>
 payload: <receive error>
 ```
 
-Printable ASCII is displayed normally.
+Printable ASCII is displayed normally. Common control characters are escaped (`\\n`, `\\r`, and `\\t`); other non-printable bytes appear as hexadecimal escapes such as `\\x00` or `\\xff`.
 
-Common control characters are escaped:
-
-```text
-\n
-\r
-\t
-```
-
-Other non-printable bytes are shown as hexadecimal escapes:
-
-```text
-\x00
-\xff
-```
-
-Payload data is handled as bounded bytes and is not assumed to be a NUL-terminated C string.
-
-The short timeout is intentional. tcpnoise is interested in the first thing a scanner throws at the socket, not in maintaining long-running sessions.
-
-The current implementation still performs a single `recv()`. Multi-read bounded capture is a possible future improvement.
+Payloads are handled as bounded bytes, not assumed to be NUL-terminated C strings. HTTP User-Agent extraction is case-insensitive, bounded, and written to console/per-port logs when present.
 
 ## Logging
 
@@ -927,25 +901,135 @@ ffmpeg -i input.mp3 -ac 1 -ar 44100 -c:a pcm_s16le output.wav
 
 ### Sound routing
 
-The clicker has historically used this precedence:
+Place overrides under `sounds/` beside the executable (`AppContext.BaseDirectory`).
+The directory is optional; each node and each individual override is optional too.
+
+```text
+TcpNoiseClicker/
+  click.wav                 # required ultimate fallback
+  new.wav                   # optional
+  ipv6.wav                  # optional
+  bong.wav                  # optional
+  sounds/
+    dn42/
+      all.wav               # every event from this sensor
+    ygg/
+      all.wav
+    ports/
+      22.wav                # global port override
+      80.wav
+      443.wav
+    clanker/                # matches the event's Sensor
+      click.wav
+      new.wav
+      ipv6.wav
+      bong.wav
+      ports/
+        22.wav              # node port override
+        443.wav
+    scopecreep/
+      bong.wav
+      ports/
+        80.wav
+```
+
+For every event, resolution uses this exact order:
+
+1. `sounds/<Sensor>/all.wav`
+2. `sounds/<Sensor>/ports/<ListenPort>.wav`
+3. `sounds/ports/<ListenPort>.wav`
+4. `sounds/<Sensor>/<semantic sound filename>`
+5. `<AppContext.BaseDirectory>/<semantic sound filename>`
+6. `<AppContext.BaseDirectory>/click.wav`
+
+The semantic filename is selected with these rules, in order:
 
 ```text
 1. port 420 / 42069 -> bong.wav
 2. IPv6             -> ipv6.wav
 3. seenCount == 1   -> new.wav
-4. mapped port      -> port-specific sound
-5. otherwise        -> click.wav
+4. otherwise        -> click.wav
 ```
 
-Mute suppresses audio without stopping event reception/counting.
+A sensor's `all.wav` beats every other override and semantic rule, giving that
+entire sensor/network one recognizable sound. Port overrides beat every semantic
+rule, including IPv6, first-seen, and bong.
+Missing, inaccessible, corrupt, or unplayable optional sounds silently fall through
+to the next candidate. A missing/bad required `click.wav` still reports a startup
+error; if it fails during playback, the clicker retains its system-beep fallback.
 
-### Burst-audio limitation
+Loaded sounds and missing/failed lookups are cached by full path, distinguishing
+sensor, port, and sound filename (including `all.wav`). Playback failures are
+retired from the cache.
+Restart the app after adding or changing overrides. All cached players are disposed
+after the single sound consumer stops.
+
+Sensor names must be safe single Windows directory names. Paths, traversal,
+invalid filename characters, device names, trailing dots/spaces, and the reserved
+name `ports` skip node overrides and still use global sounds. Names match Windows
+filesystem casing. Checked-in files beneath `TcpNoiseClicker/sounds/**` are copied
+to build and publish output with their directory structure preserved.
+
+Mute suppresses audio without stopping event reception/counting. History and
+tooltips continue to update independently of playback.
+
+Run the sound-resolution tests without audio hardware or a NATS connection:
+
+```powershell
+dotnet test .\TcpNoiseClicker\TcpNoiseClicker.slnx
+```
+
+### Burst audio
 
 Real Internet traffic can arrive in large bursts.
 
 Audio notification should be treated as a convenience; event reception/counting is the important path.
 
-A bounded/serialized sound queue remains a reasonable improvement if scanner bursts create audio contention or delayed playback.
+The clicker uses a bounded queue of 32 events and one consumer with synchronous
+playback. When the queue is full, new audio notifications are dropped while all
+received events still update counts and history. Override loading and resolution run
+on that consumer, so override loading does not block NATS reception.
+
+### Fast sound mode
+
+The tray menu's **Fast sound mode** toggle enables overlapping WAV playback. It
+defaults to OFF and resets to OFF on launch; the app has no saved preferences.
+OFF retains serialized `SoundPlayer.PlaySync()` playback and the existing sound
+resolution/fallback chain.
+
+ON uses NAudio's independent `WaveOutEvent` outputs so long WAVs can keep playing
+under subsequent sounds. WAV bytes are cached in memory; each active voice owns
+its own reader and output device, which are disposed when it finishes. The limits
+are easy to tune in `FastSoundScheduler.cs`:
+
+```csharp
+FastSoundStartIntervalMs = 75;
+MaxConcurrentSounds = 4;
+```
+
+The interval is between starts, without truncating a WAV. When all four voices
+are busy, audio events are dropped. The existing 32-event queue still bounds
+pending notifications, while NATS reception, counts, history, and the UI continue
+independently.
+
+Turning ON lets a currently playing serial sound finish before overlapping
+playback begins. Turning OFF wakes the audio worker to stop fast voices before
+resuming serial playback; an in-progress launch interval can delay this by up to
+75 ms. Muting continues to suppress new audio events. Exit cancels pending
+launches and stops active playback without waiting for long WAVs to finish.
+
+## Collector tests
+
+The small C test suites exercise HTTP header/User-Agent parsing and bounded network receiving on FreeBSD or Linux. From the repository root:
+
+```sh
+cc -Wall -Wextra -Wpedantic -Iinclude src/http.c tests/http_test.c -o /tmp/tcpnoise-http-test
+/tmp/tcpnoise-http-test
+cc -Wall -Wextra -Wpedantic -Iinclude src/network.c src/http.c tests/network_test.c -o /tmp/tcpnoise-network-test
+/tmp/tcpnoise-network-test
+```
+
+The network tests use local socket pairs; they do not need public listeners or a NATS broker.
 
 ## Testing NATS delivery
 
@@ -1019,7 +1103,7 @@ listener becomes readable
         +--> optionally choose/send banner
         |
         v
-bounded recv with short timeout
+bounded multi-read capture with HTTP-aware early stopping
         |
         v
 resolve numeric remote endpoint
@@ -1057,6 +1141,7 @@ The main collector is split into a small set of modules rather than one file per
 ├── include/
 │   ├── banner.h
 │   ├── database.h
+│   ├── http.h
 │   ├── logging.h
 │   ├── messaging.h
 │   └── network.h
@@ -1064,9 +1149,13 @@ The main collector is split into a small set of modules rather than one file per
 │   ├── main.c
 │   ├── banner.c
 │   ├── database.c
+│   ├── http.c
 │   ├── logging.c
 │   ├── messaging.c
 │   └── network.c
+├── tests/
+│   ├── http_test.c
+│   └── network_test.c
 ├── TcpNoiseClicker/
 └── AndroidNoiseClicker/
 ```
@@ -1082,7 +1171,7 @@ The Windows and Android clients are separate from the C collector and communicat
 | Maximum listeners with `--bind` | 11 |
 | Initial payload capture | 4096 bytes |
 | Banner send buffer | 256 bytes |
-| Receive timeout | ~250 ms |
+| Overall receive deadline | ~250 ms |
 
 Persistent seen-IP tracking and per-port/IP-version connection totals are stored in SQLite.
 
@@ -1094,7 +1183,7 @@ It is deliberately simple:
 
 * TCP only
 * single-threaded collector
-* one initial bounded `recv()` per accepted connection
+* bounded initial multi-read capture per accepted connection (not a full protocol session)
 * shallow one-line banner responses
 * simple text logging
 * SQLite for persistent counters/history
@@ -1106,7 +1195,7 @@ It is deliberately simple:
 * no raw SYN monitoring
 * no internal privilege-dropping mechanism
 * `rand()` is used for banner selection
-* NATS URL and subject are currently compile/source configuration rather than runtime options
+* NATS subject is currently source-configured; the URL can be overridden with `TCPNOISE_NATS_URL`
 
 A client that connects and remains silent can occupy the single connection handler until the receive timeout expires.
 
@@ -1117,7 +1206,7 @@ That is acceptable for the current goal: observing ordinary unsolicited backgrou
 Possible future work includes:
 
 * Separate per-sensor local database/log directories for multi-instance deployments where local statistics must remain isolated
-* Make NATS endpoint/subject runtime configurable
+* Make the NATS subject configurable without editing the source
 * Improve TcpNoiseClicker burst audio with bounded/serialized playback
 * More port-specific sounds and UI controls where useful
 * Restore separate Mission Control publication while keeping `tcpnoise.connection` for ephemeral live subscribers
@@ -1134,7 +1223,6 @@ Possible future work includes:
 * terminal scrollback
 * per-port terminal views
 * configurable log/database paths
-* bounded multi-read payload capture
 * optional limited protocol emulation
 * optional TLS handling for TLS-like probes
 

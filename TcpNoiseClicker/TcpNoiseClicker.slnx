@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="TcpNoiseClicker.csproj" />
+  <Project Path="../TcpNoiseClicker.Tests/TcpNoiseClicker.Tests.csproj" />
 </Solution>

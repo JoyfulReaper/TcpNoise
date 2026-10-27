@@ -1,8 +1,6 @@
 ﻿using NATS.Client.Core;
 using NATS.Net;
-using System.Media;
 using System.Text.Json;
-using System.Threading.Channels;
 
 namespace TcpNoiseClicker;
 
@@ -14,14 +12,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly CancellationTokenSource _cancellation = new();
     private readonly NotifyIcon _notifyIcon;
     private readonly ToolStripMenuItem _muteMenuItem;
+    private readonly ToolStripMenuItem _fastSoundMenuItem;
     private readonly Task _listenerTask;
 
-    private readonly SoundPlayer _clickPlayer;
-    private readonly SoundPlayer? _newPlayer;
-    private readonly SoundPlayer? _ipv6Player;
-    private readonly SoundPlayer? _bongPlayer;
-
-    private readonly Dictionary<ushort, SoundPlayer> _portSounds = new();
+    private readonly SoundResolver _sounds;
+    private readonly SoundPlaybackWorker _playback;
 
     private volatile bool _muted;
 
@@ -39,7 +34,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private ushort _lastListenPort;
 
     private const int SoundQueueCapacity = 32;
-    private readonly Channel<TcpNoisePayload?> _soundQueue;
     private readonly Task _soundTask;
 
     private const int HistoryCapacity = 50;
@@ -51,11 +45,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     public TrayApplicationContext()
     {
-        _clickPlayer = LoadRequiredSound("click.wav");
+        try
+        {
+            _sounds = new SoundResolver(AppContext.BaseDirectory, PlayerSound.Load);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.ToString(),
+                "Failed to load click.wav",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            throw;
+        }
 
-        _newPlayer = TryLoadSound("new.wav");
-        _ipv6Player = TryLoadSound("ipv6.wav");
-        _bongPlayer = TryLoadSound("bong.wav");
+        _playback = new SoundPlaybackWorker(_sounds, SoundQueueCapacity);
 
         var historyMenuItem = new ToolStripMenuItem("Show history");
         historyMenuItem.Click += ShowHistory;
@@ -63,12 +67,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _muteMenuItem = new ToolStripMenuItem("Mute");
         _muteMenuItem.Click += ToggleMute;
 
+        _fastSoundMenuItem = new ToolStripMenuItem("Fast sound mode") { CheckOnClick = true };
+        _fastSoundMenuItem.CheckedChanged += (_, _) => _playback.SetFastMode(_fastSoundMenuItem.Checked);
+
         var exitMenuItem = new ToolStripMenuItem("Exit");
         exitMenuItem.Click += Exit;
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(historyMenuItem);
         menu.Items.Add(_muteMenuItem);
+        menu.Items.Add(_fastSoundMenuItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitMenuItem);
 
@@ -90,16 +98,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tooltipTimer.Tick += (_, _) => RefreshTooltip();
         _tooltipTimer.Start();
 
-        _soundQueue = Channel.CreateBounded<TcpNoisePayload?>(
-            new BoundedChannelOptions(SoundQueueCapacity)
-            {
-                SingleReader = true,
-                SingleWriter = true,
-                FullMode = BoundedChannelFullMode.Wait
-            });
-
         _soundTask = Task.Run(
-            () => PlaySoundsAsync(_cancellation.Token));
+            () => _playback.RunAsync(_cancellation.Token));
 
         _listenerTask = Task.Run(
             () => ListenAsync(_cancellation.Token));
@@ -156,23 +156,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
                 if (!_muted)
                 {
-                    _soundQueue.Writer.TryWrite(connectionEvent?.Payload);
+                    _playback.TryEnqueue(connectionEvent?.Payload);
                 }
-            }
-        }
-        catch (OperationCanceledException)
-            when (cancellationToken.IsCancellationRequested)
-        {
-        }
-    }
-
-    private async Task PlaySoundsAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await foreach (var connection in _soundQueue.Reader.ReadAllAsync(cancellationToken))
-            {
-                PlaySound(connection);
             }
         }
         catch (OperationCanceledException)
@@ -285,100 +270,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
             + value[^endLength..];
     }
 
-    private void PlaySound(TcpNoisePayload? connection)
-    {
-        var player = GetSound(connection);
-
-        try
-        {
-            player.PlaySync();
-        }
-        catch
-        {
-            SystemSounds.Beep.Play();
-        }
-    }
-
-    private SoundPlayer GetSound(TcpNoisePayload? connection)
-    {
-        if (connection is null)
-        {
-            return _clickPlayer;
-        }
-
-        if (connection.ListenPort is 420 or 42069)
-        {
-            return _bongPlayer ?? _clickPlayer;
-        }
-
-        if (connection.IpVersion == 6)
-        {
-            return _ipv6Player ?? _clickPlayer;
-        }
-
-        if (connection.SeenCount == 1)
-        {
-            return _newPlayer ?? _clickPlayer;
-        }
-
-        // Ready for port-specific sounds later.
-        if (_portSounds.TryGetValue(
-            connection.ListenPort,
-            out var portPlayer))
-        {
-            return portPlayer;
-        }
-
-        return _clickPlayer;
-    }
-
-    private static SoundPlayer LoadRequiredSound(string fileName)
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, fileName);
-        var player = new SoundPlayer(path);
-
-        try
-        {
-            player.Load();
-            return player;
-        }
-        catch (Exception ex)
-        {
-            player.Dispose();
-
-            MessageBox.Show(
-                ex.ToString(),
-                $"Failed to load {fileName}",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-
-            throw;
-        }
-    }
-
-    private static SoundPlayer? TryLoadSound(string fileName)
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, fileName);
-
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        var player = new SoundPlayer(path);
-
-        try
-        {
-            player.Load();
-            return player;
-        }
-        catch
-        {
-            player.Dispose();
-            return null;
-        }
-    }
-
     private void ToggleMute(object? sender, EventArgs e)
     {
         _muted = !_muted;
@@ -401,27 +292,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
         }
 
-        try
+        finally
         {
-            await _listenerTask;
+            _playback.Dispose();
+            _sounds.Dispose();
+
+            _notifyIcon.Dispose();
+            _cancellation.Dispose();
+
+            ExitThread();
         }
-        catch (OperationCanceledException)
-        {
-        }
-
-        foreach (var player in _portSounds.Values)
-        {
-            player.Dispose();
-        }
-
-        _bongPlayer?.Dispose();
-        _ipv6Player?.Dispose();
-        _newPlayer?.Dispose();
-        _clickPlayer.Dispose();
-
-        _notifyIcon.Dispose();
-        _cancellation.Dispose();
-
-        ExitThread();
     }
 }

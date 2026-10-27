@@ -23,6 +23,7 @@ bool messaging_publish_connection(
 	bool banner_sent,
     const char *payload,
     size_t payload_len,
+    const char *user_agent,
     const char *timestamp_utc);
 
 #endif

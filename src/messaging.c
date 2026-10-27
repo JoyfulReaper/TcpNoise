@@ -12,18 +12,76 @@
 #define LIVE_CONNECTION_SUBJECT "tcpnoise.connection"
 #define MISSION_CONTROL_CONNECTION_SUBJECT "events.tcpnoise.connection"
 
+static void nats_disconnected(natsConnection *connection, void *closure)
+{
+    (void)connection;
+    (void)closure;
+
+    fprintf(stderr, "NATS: disconnected, attempting reconnection\n");
+}
+
+static void nats_reconnected(natsConnection *connection, void *closure)
+{
+    (void)connection;
+    (void)closure;
+
+    fprintf(stderr, "NATS: reconnected successfully\n");
+}
+
+static void nats_initially_connected(natsConnection *connection, void *closure)
+{
+    (void)connection;
+    (void)closure;
+
+    fprintf(stderr, "NATS: initial connection established after retry\n");
+}
+
 natsConnection *messaging_connect(const char *url)
 {
-	natsConnection *connection = NULL;
+    natsConnection *connection = NULL;
+    natsOptions *options = NULL;
 
-	natsStatus status = natsConnection_ConnectTo(&connection, url);
-	if(status != NATS_OK)
-	{
-		fprintf(stderr, "NATS: %s\n", natsStatus_GetText(status));
-		return NULL;
-	}
+    natsStatus status = natsOptions_Create(&options);
 
-	return connection;
+    if (status == NATS_OK)
+        status = natsOptions_SetURL(options, url);
+
+    if (status == NATS_OK)
+        status = natsOptions_SetMaxReconnect(options, -1);
+
+    if (status == NATS_OK)
+        status = natsOptions_SetReconnectWait(options, 2000);
+
+    if (status == NATS_OK)
+        status = natsOptions_SetDisconnectedCB(options, nats_disconnected, NULL);
+
+    if (status == NATS_OK)
+        status = natsOptions_SetReconnectedCB(options, nats_reconnected, NULL);
+
+    if (status == NATS_OK)
+        status = natsOptions_SetRetryOnFailedConnect(
+            options, true, nats_initially_connected, NULL);
+
+    if (status == NATS_OK)
+        status = natsConnection_Connect(&connection, options);
+
+    natsOptions_Destroy(options);
+
+    if (status == NATS_NOT_YET_CONNECTED)
+    {
+        fprintf(stderr, "NATS: unavailable, retrying in background\n");
+        return connection;
+    }
+
+    if (status != NATS_OK)
+    {
+        fprintf(stderr, "NATS: %s\n", natsStatus_GetText(status));
+        natsConnection_Destroy(connection);
+        return NULL;
+    }
+
+    fprintf(stderr, "NATS: connected\n");
+    return connection;
 }
 
 void messaging_disconnect(natsConnection *connection)
@@ -206,6 +264,7 @@ bool messaging_publish_connection(
     bool banner_sent,
     const char *payload,
     size_t payload_len,
+    const char *user_agent,
     const char *timestamp_utc)
 {
 	#ifndef ENABLE_NATS
@@ -267,19 +326,39 @@ bool messaging_publish_connection(
 		}
 	}
 
+	char *escaped_user_agent = NULL;
+
+	if (user_agent != NULL)
+	{
+		escaped_user_agent = escape_json_bytes(user_agent, strlen(user_agent));
+
+		if (escaped_user_agent == NULL)
+		{
+			fprintf(stderr, "Failed to encode User-Agent\n");
+
+			free(escaped_payload);
+			free(escaped_sensor);
+			free(escaped_banner);
+
+			return false;
+		}
+	}
+
 	size_t json_size =
 		strlen(escaped_payload) +
 		strlen(escaped_sensor) +
 		(escaped_banner != NULL ? strlen(escaped_banner) : 0) +
+		(escaped_user_agent != NULL ? strlen(escaped_user_agent) : 0) +
 		2048;
 		
 	char *json = malloc(json_size);
-	if(json == NULL)
+	if (json == NULL)
 	{
 		fprintf(stderr, "Failed to allocate NATS event\n");
 		free(escaped_payload);
 		free(escaped_sensor);
 		free(escaped_banner);
+		free(escaped_user_agent);
 		
 		return false;
 	}
@@ -306,6 +385,7 @@ bool messaging_publish_connection(
 			"\"seenCount\":%" PRIu64 ","
 			"\"banner\":%s%s%s,"
 			"\"bannerSent\":%s,"
+			"\"userAgent\":%s%s%s,"
 			"\"payloadLength\":%zu,"
 			"\"payload\":\"%s\""
 		"}"
@@ -324,12 +404,16 @@ bool messaging_publish_connection(
 		banner != NULL ? escaped_banner : "null",
 		banner != NULL ? "\"" : "",
 		banner_sent ? "true" : "false",
+		user_agent != NULL ? "\"" : "",
+		user_agent != NULL ? escaped_user_agent : "null",
+		user_agent != NULL ? "\"" : "",
 		payload_len,
 		escaped_payload);
 
 	free(escaped_payload);
 	free(escaped_sensor);
 	free(escaped_banner);
+	free(escaped_user_agent);
 
     if(result < 0)
     {

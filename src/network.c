@@ -1,4 +1,5 @@
 #include "network.h"
+#include "http.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -12,8 +13,11 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <poll.h>
+#include <time.h>
 
 #define LISTEN_BACKLOG 64
+#define RECEIVE_DEADLINE_MS 250
 
 enum receive_status receive_payload(
 	int cfd,
@@ -21,21 +25,84 @@ enum receive_status receive_payload(
 	size_t buffer_size,
 	ssize_t *bytes_received)
 {
-	*bytes_received = recv(cfd, buffer, buffer_size, 0);
-	
-	if(*bytes_received > 0)
-		return RECEIVE_DATA;
-	
-	if(*bytes_received == 0)
-		return RECEIVE_CLOSED;
-		
-	if(errno == EAGAIN || errno == EWOULDBLOCK)
-		return RECEIVE_TIMEOUT;
-		
-	if(errno == EINTR)
-		return RECEIVE_INTERRUPTED;
-	
-	return RECEIVE_ERROR;
+	*bytes_received = 0;
+
+	if(buffer_size == 0)
+	{
+		errno = EINVAL;
+		return RECEIVE_ERROR;
+	}
+
+	struct timespec now;
+	if(clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+	{
+		return RECEIVE_ERROR;
+	}
+
+	int64_t deadline_ns =
+		(int64_t)now.tv_sec * 1000000000LL +
+		now.tv_nsec +
+		(int64_t)RECEIVE_DEADLINE_MS * 1000000LL;
+
+	while ((size_t)*bytes_received < buffer_size)
+	{
+		if(clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+			return *bytes_received > 0 ? RECEIVE_DATA : RECEIVE_ERROR;
+
+		int64_t remaining_ns = deadline_ns -
+			((int64_t)now.tv_sec * 1000000000LL + now.tv_nsec);
+
+		if(remaining_ns <= 0)
+			break;
+
+		int timeout_ms = (int)((remaining_ns + 999999LL) / 1000000LL);
+
+		struct pollfd pfd = {
+			.fd = cfd,
+			.events = POLLIN
+		};
+
+		int ready = poll(&pfd, 1, timeout_ms);
+
+		if (ready == 0)
+			break;
+
+		if (ready < 0)
+		{
+			if (errno == EINTR)
+				return *bytes_received > 0 ?  RECEIVE_DATA : RECEIVE_INTERRUPTED;
+
+			return *bytes_received > 0 ? RECEIVE_DATA : RECEIVE_ERROR;
+		}
+
+		ssize_t received = recv(
+			cfd,
+			buffer + *bytes_received,
+			buffer_size - (size_t)*bytes_received,
+			MSG_DONTWAIT);
+
+		if (received > 0)
+		{
+			*bytes_received += received;
+
+			if (http_request_complete(buffer, (size_t)*bytes_received))
+				return RECEIVE_DATA;
+
+			continue;
+		}
+
+		if (received == 0)
+			return *bytes_received > 0 ? RECEIVE_DATA : RECEIVE_CLOSED;
+
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			continue;
+
+		if (errno == EINTR)
+			return *bytes_received > 0 ? RECEIVE_DATA : RECEIVE_INTERRUPTED;
+
+		return *bytes_received > 0 ? RECEIVE_DATA : RECEIVE_ERROR;
+	}
+	 return *bytes_received > 0 ? RECEIVE_DATA : RECEIVE_TIMEOUT;
 }
 
 bool set_receive_timeout(int cfd)
@@ -43,7 +110,7 @@ bool set_receive_timeout(int cfd)
 	struct timeval timeout;
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 250000;
-	
+
 	if(setsockopt(
 		cfd,
 		SOL_SOCKET,
@@ -54,7 +121,7 @@ bool set_receive_timeout(int cfd)
 		perror("setsockopt SO_RCVTIMEO");
 		return false;
 	}
-	
+
 	return true;
 }
 
@@ -62,20 +129,20 @@ int create_socket(int family)
 {
 	int sfd;
 	int enabled = 1;
-	
+
 	if ((sfd = socket(family, SOCK_STREAM, 0)) < 0)
 	{
 		perror("socket");
 		return -1;
 	}
-	
+
 	if(setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof enabled) == -1)
 	{
 		perror("setsockopt SO_REUSEADDR");
 		close(sfd);
 		return -1;
 	}
-	
+
 	if(family == AF_INET6)
 	{
 		if(setsockopt(sfd, IPPROTO_IPV6, IPV6_V6ONLY, &enabled, sizeof enabled) == -1)
@@ -85,7 +152,7 @@ int create_socket(int family)
 			return -1;
 		}
 	}
-	
+
 	return sfd;
 }
 
@@ -151,7 +218,7 @@ bool listen_socket(int sfd)
 		perror("listen");
 		return false;
 	}
-	
+
 	return true;
 }
 
@@ -167,7 +234,7 @@ int accept_connection(int sfd, struct sockaddr_storage *peer_addr, socklen_t *pe
 
 		return -1;
 	}
-	
+
 	return cfd;
 }
 
@@ -206,7 +273,7 @@ bool resolve_remote(
 	uint16_t *remote_port)
 {
 	char service[NI_MAXSERV];
-	
+
 	int res = getnameinfo(
 		(const struct sockaddr *)peer_addr,
 		peer_addr_size,
@@ -215,19 +282,19 @@ bool resolve_remote(
 		service,
 		sizeof service,
 		NI_NUMERICHOST | NI_NUMERICSERV);
-		
+
 	if(res != 0)
 	{
 		fprintf(stderr, "getnameinfo: %s\n", gai_strerror(res));
 		snprintf(ip, ip_size, "%s", "(unknown)");
 		*remote_port = 0;
 		return false;
-	} else {		
+	} else {
 		char *end;
 		errno = 0;
-		
+
 		long parsed_port = strtol(service, &end, 10);
-		
+
 		if(errno == ERANGE ||
 		   end == service ||
 		   *end != '\0' ||
